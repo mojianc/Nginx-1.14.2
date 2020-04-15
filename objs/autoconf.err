@@ -1,0 +1,55 @@
+
+
+----------------------------------------
+checking for C compiler
+
+----------
+
+#include <sys/types.h>
+
+
+
+int main(void) {
+    ;
+    return 0;
+}
+
+----------
+cc -o objs/autotest objs/autotest.c
+----------
+
+----------------------------------------
+checking for gcc -pipe switch
+
+----------
+
+#include <sys/types.h>
+
+
+
+int main(void) {
+    ;
+    return 0;
+}
+
+----------
+cc -pipe -o objs/autotest objs/autotest.c
+----------
+
+----------------------------------------
+checking for --with-ld-opt="-lstdc++"
+
+----------
+
+#include <sys/types.h>
+
+
+
+int main(void) {
+    ;
+    return 0;
+}
+
+----------
+cc -o objs/autotest objs/autotest.c -lstdc++
+----------
