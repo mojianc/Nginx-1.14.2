@@ -102,7 +102,7 @@ static ngx_uint_t               ngx_thread_pool_task_id;
 static ngx_atomic_t             ngx_thread_pool_done_lock;
 static ngx_thread_pool_queue_t  ngx_thread_pool_done;
 
-
+//线程池初始化
 static ngx_int_t
 ngx_thread_pool_init(ngx_thread_pool_t *tp, ngx_log_t *log, ngx_pool_t *pool)
 {
@@ -116,13 +116,13 @@ ngx_thread_pool_init(ngx_thread_pool_t *tp, ngx_log_t *log, ngx_pool_t *pool)
                "the configured event method cannot be used with thread pools");
         return NGX_ERROR;
     }
-
+    //初始化任务队列
     ngx_thread_pool_queue_init(&tp->queue);
-
+    //创建线程锁
     if (ngx_thread_mutex_create(&tp->mtx, log) != NGX_OK) {
         return NGX_ERROR;
     }
-
+    //创建线程条件变量
     if (ngx_thread_cond_create(&tp->cond, log) != NGX_OK) {
         (void) ngx_thread_mutex_destroy(&tp->mtx, log);
         return NGX_ERROR;
@@ -154,6 +154,7 @@ ngx_thread_pool_init(ngx_thread_pool_t *tp, ngx_log_t *log, ngx_pool_t *pool)
 #endif
 
     for (n = 0; n < tp->threads; n++) {
+        //创建线程池中的每个线程
         err = pthread_create(&tid, &attr, ngx_thread_pool_cycle, tp);
         if (err) {
             ngx_log_error(NGX_LOG_ALERT, log, err,
@@ -226,10 +227,11 @@ ngx_thread_task_alloc(ngx_pool_t *pool, size_t size)
     return task;
 }
 
-
+//添加任务到队列中
 ngx_int_t
 ngx_thread_task_post(ngx_thread_pool_t *tp, ngx_thread_task_t *task)
 {
+    //如果当前的任务正在处理就退出
     if (task->event.active) {
         ngx_log_error(NGX_LOG_ALERT, tp->log, 0,
                       "task #%ui already active", task->id);
@@ -273,7 +275,7 @@ ngx_thread_task_post(ngx_thread_pool_t *tp, ngx_thread_task_t *task)
     return NGX_OK;
 }
 
-
+//线程池中线程处理主函数
 static void *
 ngx_thread_pool_cycle(void *data)
 {
@@ -304,13 +306,14 @@ ngx_thread_pool_cycle(void *data)
     }
 
     for ( ;; ) {
+        //阻塞的方式获取线程锁
         if (ngx_thread_mutex_lock(&tp->mtx, tp->log) != NGX_OK) {
             return NULL;
         }
 
         /* the number may become negative */
         tp->waiting--;
-
+        //如果任务队列为空，就cond_wait阻塞等待有新任务时调用cond_signal/broadcast触发
         while (tp->queue.first == NULL) {
             if (ngx_thread_cond_wait(&tp->cond, &tp->mtx, tp->log)
                 != NGX_OK)
@@ -319,7 +322,7 @@ ngx_thread_pool_cycle(void *data)
                 return NULL;
             }
         }
-
+        //从任务队列中获取task，并将其从队列中移除
         task = tp->queue.first;
         tp->queue.first = task->next;
 
@@ -338,9 +341,9 @@ ngx_thread_pool_cycle(void *data)
         ngx_log_debug2(NGX_LOG_DEBUG_CORE, tp->log, 0,
                        "run task #%ui in thread pool \"%V\"",
                        task->id, &tp->name);
-
+        //task的处理函数
         task->handler(task->ctx, tp->log);
-
+        
         ngx_log_debug2(NGX_LOG_DEBUG_CORE, tp->log, 0,
                        "complete task #%ui in thread pool \"%V\"",
                        task->id, &tp->name);
@@ -348,10 +351,10 @@ ngx_thread_pool_cycle(void *data)
         task->next = NULL;
 
         ngx_spinlock(&ngx_thread_pool_done_lock, 1, 2048);
-
+        //将经过预处理的任务添加到done队列中等待调用event的回调函数继续处理
         *ngx_thread_pool_done.last = task;
         ngx_thread_pool_done.last = &task->next;
-
+        //防止编译器优化，保证解锁操作是在上述语句执行完毕后再去执行的
         ngx_memory_barrier();
 
         ngx_unlock(&ngx_thread_pool_done_lock);
@@ -360,7 +363,7 @@ ngx_thread_pool_cycle(void *data)
     }
 }
 
-
+//处理pool_done队列上task中包含的每个event事件
 static void
 ngx_thread_pool_handler(ngx_event_t *ev)
 {
@@ -370,7 +373,7 @@ ngx_thread_pool_handler(ngx_event_t *ev)
     ngx_log_debug0(NGX_LOG_DEBUG_CORE, ev->log, 0, "thread pool handler");
 
     ngx_spinlock(&ngx_thread_pool_done_lock, 1, 2048);
-
+    //获取任务链表的头部
     task = ngx_thread_pool_done.first;
     ngx_thread_pool_done.first = NULL;
     ngx_thread_pool_done.last = &ngx_thread_pool_done.first;
@@ -382,28 +385,31 @@ ngx_thread_pool_handler(ngx_event_t *ev)
     while (task) {
         ngx_log_debug1(NGX_LOG_DEBUG_CORE, ev->log, 0,
                        "run completion handler for task #%ui", task->id);
-
+        //遍历队列中的所有任务事件
         event = &task->event;
         task = task->next;
 
         event->complete = 1;
         event->active = 0;
-
+        //调用event对应的处理函数有针对性的进行处理
         event->handler(event);
     }
 }
 
-
+//创建线程池所需的基础结构
 static void *
 ngx_thread_pool_create_conf(ngx_cycle_t *cycle)
 {
     ngx_thread_pool_conf_t  *tcf;
 
+    //从cycle->pool指向的内存池中申请一块内存
     tcf = ngx_pcalloc(cycle->pool, sizeof(ngx_thread_pool_conf_t));
     if (tcf == NULL) {
         return NULL;
     }
 
+    //先申请包含4个ngx_thread_pool_t指针类型元素的数组
+    //ngx_thread_pool_t结构体中保存了一个线程池相关的信息
     if (ngx_array_init(&tcf->pools, cycle->pool, 4,
                        sizeof(ngx_thread_pool_t *))
         != NGX_OK)
@@ -414,7 +420,7 @@ ngx_thread_pool_create_conf(ngx_cycle_t *cycle)
     return tcf;
 }
 
-
+//判断包含多个线程池的数组中的各个线程池的配置是否正确
 static char *
 ngx_thread_pool_init_conf(ngx_cycle_t *cycle, void *conf)
 {
@@ -424,7 +430,7 @@ ngx_thread_pool_init_conf(ngx_cycle_t *cycle, void *conf)
     ngx_thread_pool_t  **tpp;
 
     tpp = tcf->pools.elts;
-
+    //遍历数组中所有的线程池配置，并检查其正确性
     for (i = 0; i < tcf->pools.nelts; i++) {
 
         if (tpp[i]->threads) {
@@ -451,7 +457,7 @@ ngx_thread_pool_init_conf(ngx_cycle_t *cycle, void *conf)
     return NGX_CONF_OK;
 }
 
-
+//解析处理配置文件中thread_pool的配置，并将相关信息保存的ngx_thread_pool_t中
 static char *
 ngx_thread_pool(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -461,6 +467,9 @@ ngx_thread_pool(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
+    //根据thread_pool配置中的name作为线程池的唯一标识（如果重名，只有第一个有效）
+    //申请ngx_thread_pool_t结构保存线程池的相关信息
+    //由此可见，nginx支持配置多个name不同的线程池
     tp = ngx_thread_pool_add(cf, &value[1]);
 
     if (tp == NULL) {
@@ -474,9 +483,9 @@ ngx_thread_pool(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     tp->max_queue = 65536;
-
+    //处理thread_pool配置行的所有元素
     for (i = 2; i < cf->args->nelts; i++) {
-
+        //检查配置的最大队列长度
         if (ngx_strncmp(value[i].data, "threads=", 8) == 0) {
 
             tp->threads = ngx_atoi(value[i].data + 8, value[i].len - 8);
@@ -578,14 +587,16 @@ ngx_thread_pool_get(ngx_cycle_t *cycle, ngx_str_t *name)
     return NULL;
 }
 
-
+//在上述的流程走完之后，nginx的master就保存了一份所有线程池的配置（tcf->pools），这份配置在创建worker时也会被继承。
+//然后每个worker中都调用各个核心模块的init_process函数（如果有的话）。
+//创建线程池所需的基础结构
 static ngx_int_t
 ngx_thread_pool_init_worker(ngx_cycle_t *cycle)
 {
     ngx_uint_t                i;
     ngx_thread_pool_t       **tpp;
     ngx_thread_pool_conf_t   *tcf;
-
+    //如果不是worker或者只有一个worker就不起用线程池
     if (ngx_process != NGX_PROCESS_WORKER
         && ngx_process != NGX_PROCESS_SINGLE)
     {
@@ -598,12 +609,13 @@ ngx_thread_pool_init_worker(ngx_cycle_t *cycle)
     if (tcf == NULL) {
         return NGX_OK;
     }
-
+    //初始化任务队列
     ngx_thread_pool_queue_init(&ngx_thread_pool_done);
 
     tpp = tcf->pools.elts;
 
     for (i = 0; i < tcf->pools.nelts; i++) {
+        //初始化各个线程池
         if (ngx_thread_pool_init(tpp[i], cycle->log, cycle->pool) != NGX_OK) {
             return NGX_ERROR;
         }

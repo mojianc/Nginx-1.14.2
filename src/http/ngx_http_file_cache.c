@@ -662,7 +662,7 @@ ngx_http_file_cache_read(ngx_http_request_t *r, ngx_http_cache_t *c)
     return NGX_OK;
 }
 
-
+//file_cache模块的处理函数（涉及到了线程池）
 static ssize_t
 ngx_http_file_cache_aio_read(ngx_http_request_t *r, ngx_http_cache_t *c)
 {
@@ -700,9 +700,10 @@ ngx_http_file_cache_aio_read(ngx_http_request_t *r, ngx_http_cache_t *c)
 
     if (clcf->aio == NGX_HTTP_AIO_THREADS) {
         c->file.thread_task = c->thread_task;
+        //这里注册的函数在下面语句中的ngx_thread_read函数中被调用
         c->file.thread_handler = ngx_http_cache_thread_handler;
         c->file.thread_ctx = r;
-
+        //根据任务的属性，选择正确的线程池，并初始化task结构体中的各个成员  
         n = ngx_thread_read(&c->file, c->buf->pos, c->body_start, 0, r->pool);
 
         c->thread_task = c->file.thread_task;
@@ -747,7 +748,7 @@ ngx_http_cache_aio_event_handler(ngx_event_t *ev)
 
 
 #if (NGX_THREADS)
-
+//task任务的处理函数
 static ngx_int_t
 ngx_http_cache_thread_handler(ngx_thread_task_t *task, ngx_file_t *file)
 {
@@ -778,8 +779,9 @@ ngx_http_cache_thread_handler(ngx_thread_task_t *task, ngx_file_t *file)
     }
 
     task->event.data = r;
+    //注册thread_event_handler函数，该函数在处理pool_done队列中event事件时被调用
     task->event.handler = ngx_http_cache_thread_event_handler;
-
+    //将任务放到线程池的任务队列中
     if (ngx_thread_task_post(tp, task) != NGX_OK) {
         return NGX_ERROR;
     }

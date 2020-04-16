@@ -11,18 +11,29 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
+/**
+ * Nginx的hash表结构主要几个特点：
+   (1)静态只读。当初始化生成hash表结构后，是不能动态修改这个hash表结构的内容。
+   (2)将内存利用最大化。Nginx的hash表，将内存利用率发挥到了极致，并且很多设计上面都是可以供我们学习和参考的。
+   (3)查询速度快。Nginx的hash表做了内存对齐等优化。
+   (4)主要解析配置数据。
+*/
 
-
+/**
+ * 存储hash的元素
+ */
 typedef struct {
-    void             *value;
-    u_short           len;
-    u_char            name[1];
+    void             *value;    /* 指向value的指针 */
+    u_short           len;      /* key的长度 */
+    u_char            name[1];  /* 指向key的第一个地址，key长度为变长(设计上的亮点)*/
 } ngx_hash_elt_t;
 
-
+/**
+ * Hash的桶
+ */
 typedef struct {
-    ngx_hash_elt_t  **buckets;
-    ngx_uint_t        size;
+    ngx_hash_elt_t  **buckets;   /* hash表的桶指针地址值 */
+    ngx_uint_t        size;      /* hash表的桶的个数*/
 } ngx_hash_t;
 
 
@@ -49,16 +60,19 @@ typedef struct {
 } ngx_hash_combined_t;
 
 
+/**
+ * hash表主体结构
+ */
 typedef struct {
-    ngx_hash_t       *hash;
-    ngx_hash_key_pt   key;
+    ngx_hash_t       *hash;          /* 指向hash数组结构 */
+    ngx_hash_key_pt   key;           /* 计算key散列的方法 */
 
-    ngx_uint_t        max_size;
-    ngx_uint_t        bucket_size;
+    ngx_uint_t        max_size;      /* 最大多少个 */
+    ngx_uint_t        bucket_size;   /* 桶的存储空间大小 */
 
-    char             *name;
-    ngx_pool_t       *pool;
-    ngx_pool_t       *temp_pool;
+    char             *name;          /* hash表名称 */
+    ngx_pool_t       *pool;          /* 内存池 */
+    ngx_pool_t       *temp_pool;     /* 临时内存池 */
 } ngx_hash_init_t;
 
 
