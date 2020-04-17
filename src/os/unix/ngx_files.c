@@ -754,7 +754,17 @@ ngx_close_glob(ngx_glob_t *gl)
     globfree(&gl->pglob);
 }
 
-
+/**
+ * @brief 尝试获取文件锁
+ * @details 获取文件锁时不会阻塞进程, 获取不到锁时，立即返回不会等待
+ * @param fd 文件描述符
+ * @return 是否成功获取文件锁
+ *   @retval TRUE 获取锁成功
+ *   @retval FALSE 获取锁失败
+ * @attention 这里只是建议性锁，每个使用上锁文件的进程都要检查是否有锁存在，
+ * 内核不对读写操作做内部检查和强制保护
+ * 注释来源：https://www.jianshu.com/p/5833e761db29
+ */
 ngx_err_t
 ngx_trylock_fd(ngx_fd_t fd)
 {
@@ -771,7 +781,17 @@ ngx_trylock_fd(ngx_fd_t fd)
     return 0;
 }
 
-
+/**
+ * @brief 获取锁或等待
+ * @details 获取文件锁时会阻塞进程, 获取不到锁时，一直等到获取成功
+ * @param fd 文件描述符
+ * @return 是否成功获取文件锁
+ *   @retval TRUE 获取锁成功
+ *   @retval FALSE 获取锁失败
+ * @attention 这里只是建议性锁，每个使用上锁文件的进程都要检查是否有锁存在，
+ * 内核不对读写操作做内部检查和强制保护
+ * 注释来源：https://www.jianshu.com/p/5833e761db29
+ */
 ngx_err_t
 ngx_lock_fd(ngx_fd_t fd)
 {
@@ -788,7 +808,14 @@ ngx_lock_fd(ngx_fd_t fd)
     return 0;
 }
 
-
+/**
+ * @brief 释放文件锁
+ * @param fd 文件描述符
+ * @return 是否成功释放文件锁
+ *   @retval TRUE 释放锁成功
+ *   @retval FALSE 释放锁失败
+ * 注释来源：https://www.jianshu.com/p/5833e761db29
+ */
 ngx_err_t
 ngx_unlock_fd(ngx_fd_t fd)
 {
