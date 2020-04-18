@@ -799,6 +799,9 @@ ngx_module_t  ngx_http_core_module = {
 ngx_str_t  ngx_http_core_get_method = { 3, (u_char *) "GET" };
 
 
+/**
+ * 核心分发函数，主要用于设置write写事件回调函数ngx_http_core_run_phases
+ */
 void
 ngx_http_handler(ngx_http_request_t *r)
 {
@@ -836,12 +839,15 @@ ngx_http_handler(ngx_http_request_t *r)
     r->gzip_ok = 0;
     r->gzip_vary = 0;
 #endif
-
+    /* 设置write事件回调函数，并且执行ngx_http_core_run_phases回调函数 */
     r->write_event_handler = ngx_http_core_run_phases;
     ngx_http_core_run_phases(r);
 }
 
 
+/**
+ * 11个阶段处理HTTP请求
+ */
 void
 ngx_http_core_run_phases(ngx_http_request_t *r)
 {
@@ -852,7 +858,7 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
     cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
 
     ph = cmcf->phase_engine.handlers;
-
+    /* 遍历解析和处理各个阶段的HTTP请求 如果返回rc==NGX_AGAIN 则交由下一个阶段处理；返回OK则返回结果 */
     while (ph[r->phase_handler].checker) {
 
         rc = ph[r->phase_handler].checker(r, &ph[r->phase_handler]);
@@ -864,6 +870,9 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
 }
 
 
+/**
+ * 内容接收阶段
+ */
 ngx_int_t
 ngx_http_core_generic_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
 {
@@ -876,9 +885,9 @@ ngx_http_core_generic_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generic phase: %ui", r->phase_handler);
-
+    /* handler 回调函数*/
     rc = ph->handler(r);
-
+    /* 本阶段处理完成，跳转到下一个阶段处理 */
     if (rc == NGX_OK) {
         r->phase_handler = ph->next;
         return NGX_AGAIN;

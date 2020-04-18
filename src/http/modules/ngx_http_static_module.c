@@ -269,6 +269,9 @@ ngx_http_static_handler(ngx_http_request_t *r)
 }
 
 
+/**
+ * 模块初始化
+ */
 static ngx_int_t
 ngx_http_static_init(ngx_conf_t *cf)
 {
@@ -276,12 +279,12 @@ ngx_http_static_init(ngx_conf_t *cf)
     ngx_http_core_main_conf_t  *cmcf;
 
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-
+    /* 注册到NGX_HTTP_CONTENT_PHASE阶段 */
     h = ngx_array_push(&cmcf->phases[NGX_HTTP_CONTENT_PHASE].handlers);
     if (h == NULL) {
         return NGX_ERROR;
     }
-
+    /* 设置阶段回调函数 */
     *h = ngx_http_static_handler;
 
     return NGX_OK;
