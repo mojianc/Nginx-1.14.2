@@ -18,7 +18,7 @@ static void ngx_debug_accepted_connection(ngx_event_conf_t *ecf,
     ngx_connection_t *c);
 #endif
 
-
+//接受新的连接
 void
 ngx_event_accept(ngx_event_t *ev)
 {
@@ -137,10 +137,10 @@ ngx_event_accept(ngx_event_t *ev)
 #if (NGX_STAT_STUB)
         (void) ngx_atomic_fetch_add(ngx_stat_accepted, 1);
 #endif
-
+        //如果剩余的空闲连接数小于连接池总数的1/8，下次执行ngx_process_events_and_timers时就不再竞争accept锁
         ngx_accept_disabled = ngx_cycle->connection_n / 8
                               - ngx_cycle->free_connection_n;
-
+        //从连接池中取出一个连接并进行初始化
         c = ngx_get_connection(s, ev->log);
 
         if (c == NULL) {
@@ -299,7 +299,7 @@ ngx_event_accept(ngx_event_t *ev)
 
         }
 #endif
-
+        //将新建的连接通过ngx_add_conn函数指针加入到IO复用函数的等待队列中
         if (ngx_add_conn && (ngx_event_flags & NGX_USE_EPOLL_EVENT) == 0) {
             if (ngx_add_conn(c) == NGX_ERROR) {
                 ngx_close_accepted_connection(c);
@@ -309,7 +309,7 @@ ngx_event_accept(ngx_event_t *ev)
 
         log->data = NULL;
         log->handler = NULL;
-
+        //ls对应的handler是在ngx_http_add_listening函数中将ngx_http_init_connection函数赋值给了handler
         ls->handler(c);
 
         if (ngx_event_flags & NGX_USE_KQUEUE_EVENT) {

@@ -380,7 +380,12 @@ ngx_set_inherited_sockets(ngx_cycle_t *cycle)
     return NGX_OK;
 }
 
-
+/**
+ * nginx的master进程初始化过程中，调用函数ngx_open_listening_sockets对配置文件中每个listen的端口创建了socket并进行了bind，
+ * 然后将这些已经bind的sockfd放到一个cycle->listening数组中，
+ * 这个数组在fork worker子进程时被子进程继承（子进程继承父进程的文件描述符只是给文件描述符的打开数+1，
+ * 并未改变该文件描述符指向的内容）。
+*/
 ngx_int_t
 ngx_open_listening_sockets(ngx_cycle_t *cycle)
 {
@@ -521,6 +526,7 @@ ngx_open_listening_sockets(ngx_cycle_t *cycle)
             /* TODO: close on exit */
 
             if (!(ngx_event_flags & NGX_USE_IOCP_EVENT)) {
+                //通过fcntl设置非阻塞
                 if (ngx_nonblocking(s) == -1) {
                     ngx_log_error(NGX_LOG_EMERG, log, ngx_socket_errno,
                                   ngx_nonblocking_n " %V failed",
@@ -538,7 +544,7 @@ ngx_open_listening_sockets(ngx_cycle_t *cycle)
 
             ngx_log_debug2(NGX_LOG_DEBUG_CORE, log, 0,
                            "bind() %V #%d ", &ls[i].addr_text, s);
-
+            //绑定
             if (bind(s, ls[i].sockaddr, ls[i].socklen) == -1) {
                 err = ngx_socket_errno;
 
@@ -591,7 +597,7 @@ ngx_open_listening_sockets(ngx_cycle_t *cycle)
                 ls[i].fd = s;
                 continue;
             }
-
+            //监听
             if (listen(s, ls[i].backlog) == -1) {
                 err = ngx_socket_errno;
 

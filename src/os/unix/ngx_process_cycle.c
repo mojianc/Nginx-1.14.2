@@ -723,7 +723,7 @@ ngx_master_process_exit(ngx_cycle_t *cycle)
     exit(0);
 }
 
-
+//worker进程处理连接、请求的主函数
 static void
 ngx_worker_process_cycle(ngx_cycle_t *cycle, void *data)
 {
@@ -731,7 +731,7 @@ ngx_worker_process_cycle(ngx_cycle_t *cycle, void *data)
 
     ngx_process = NGX_PROCESS_WORKER;
     ngx_worker = worker;
-
+    //初始化worker进程
     ngx_worker_process_init(cycle, worker);
 
     ngx_setproctitle("worker process");
@@ -746,7 +746,7 @@ ngx_worker_process_cycle(ngx_cycle_t *cycle, void *data)
         }
 
         ngx_log_debug0(NGX_LOG_DEBUG_EVENT, cycle->log, 0, "worker cycle");
-
+        //处理新连接以及已有连接上的新数据
         ngx_process_events_and_timers(cycle);
 
         if (ngx_terminate) {
@@ -906,7 +906,7 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
             exit(2);
         }
     }
-
+    //用来将参数set信号集初始化并清空
     sigemptyset(&set);
 
     if (sigprocmask(SIG_SETMASK, &set, NULL) == -1) {
@@ -925,7 +925,8 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
     for (i = 0; i < cycle->listening.nelts; i++) {
         ls[i].previous = NULL;
     }
-
+    //调用每个模块注册的init_process函数（这个操作是在每个worker进程中的，所以申请一些进程
+    //自用的一些资源，如内存、变量等）
     for (i = 0; cycle->modules[i]; i++) {
         if (cycle->modules[i]->init_process) {
             if (cycle->modules[i]->init_process(cycle) == NGX_ERROR) {

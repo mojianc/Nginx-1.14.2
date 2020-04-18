@@ -130,12 +130,22 @@ struct ngx_queue_s {
  * 通过业务结构体中ngx_queue_t数据结构的偏移量来得到业务主体的数据结构的指针地址
  * 此函数，是Nginx 链表设计的关键点!!!
  * 通过链表可以找到结构体所在的指针
- * typedef struct {
- * 		ngx_queue_s queue;
- * 		char * x;
- * 		....
- * } TYPE
- * 例如：ngx_queue_data(&type->queue, TYPE, queue)
+ * 例如:
+ * typedef struct
+ {
+    int key;
+    char name[32];
+    ngx_queue_t link;
+ }ngx_qTest_t;
+ // 通过ngx_queue_t指针，来比较对应结构体ngx_qTest_t的大小
+ ngx_int_t cmp(const ngx_queue_t *a, const ngx_queue_t *b)
+ {
+    ngx_qTest_t *aTest = ngx_queue_data(a, ngx_qTest_t, link); //ngx_queue_data返回的是链表结点所在结构体的指针，绝了！
+    ngx_qTest_t *bTest = ngx_queue_data(b, ngx_qTest_t, link);
+    return aTest->key < bTest->key;
+ }
+ * 可以参考：https://blog.csdn.net/daniel_ustc/article/details/19008263
+ * 例子来源:https://blog.csdn.net/daniel_ustc/article/details/17094285#t1
  */
 #define ngx_queue_data(q, type, link)                                         \
     (type *) ((u_char *) q - offsetof(type, link))

@@ -12,7 +12,7 @@
 
 #define DEFAULT_CONNECTIONS  512
 
-
+//这里各个模块并不像phase_handler或者filter那样用某种结构来存储，而是直接外部声明（方便直接调用）
 extern ngx_module_t ngx_kqueue_module;
 extern ngx_module_t ngx_eventport_module;
 extern ngx_module_t ngx_devpoll_module;
@@ -457,7 +457,7 @@ ngx_event_init_conf(ngx_cycle_t *cycle, void *conf)
     return NGX_CONF_OK;
 }
 
-
+//该函数在init_cycle中的init_module函数中被调用。调用时worker还没有启动
 static ngx_int_t
 ngx_event_module_init(ngx_cycle_t *cycle)
 {
@@ -540,7 +540,8 @@ ngx_event_module_init(ngx_cycle_t *cycle)
     shm.size = size;
     ngx_str_set(&shm.name, "nginx_shared_zone");
     shm.log = cycle->log;
-
+    //内部调用mmap申请一块共享内存，这样fork出来的worker也能继承这块共享内存的地址
+    //worker进程可以通过继承的共享内存地址来实现与master以及其他worker的通信
     if (ngx_shm_alloc(&shm) != NGX_OK) {
         return NGX_ERROR;
     }
@@ -549,7 +550,7 @@ ngx_event_module_init(ngx_cycle_t *cycle)
 
     ngx_accept_mutex_ptr = (ngx_atomic_t *) shared;
     ngx_accept_mutex.spin = (ngx_uint_t) -1;
-
+    //将accept锁放到共享内存中，这样就实现了对多个进程的互斥、同步操作
     if (ngx_shmtx_create(&ngx_accept_mutex, (ngx_shmtx_sh_t *) shared,
                          cycle->lock_file.data)
         != NGX_OK)
@@ -601,7 +602,9 @@ ngx_timer_signal_handler(int signo)
 
 #endif
 
-
+//该函数ngx_worker_process_init中的init_process函数中被调用，因为执行阶段位于
+//worker进程初始化时，所以这里申请的资源都属于各个worker独有，不用担心因被继承而导致的资源浪费
+//在这个函数中完成了对从master进程继承的listen fd的初始化工作
 static ngx_int_t
 ngx_event_process_init(ngx_cycle_t *cycle)
 {
@@ -635,14 +638,14 @@ ngx_event_process_init(ngx_cycle_t *cycle)
     ngx_use_accept_mutex = 0;
 
 #endif
-
+    //创建保存event的队列用于保存accept、普通事件
     ngx_queue_init(&ngx_posted_accept_events);
     ngx_queue_init(&ngx_posted_events);
-
+    //初始化事件定时器
     if (ngx_event_timer_init(cycle->log) == NGX_ERROR) {
         return NGX_ERROR;
     }
-
+    /* 找到事件模型的模块，例如epoll/kqueue */
     for (m = 0; cycle->modules[m]; m++) {
         if (cycle->modules[m]->type != NGX_EVENT_MODULE) {
             continue;
@@ -653,7 +656,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
         }
 
         module = cycle->modules[m]->ctx;
-
+        /* 调用epoll/kqueue等模型模块的init初始化函数,epoll调用的是ngx_epoll_init这个方法 */
         if (module->actions.init(cycle, ngx_timer_resolution) != NGX_OK) {
             /* fatal */
             exit(2);
@@ -717,7 +720,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
     }
 
 #endif
-
+    //创建连接池
     cycle->connections =
         ngx_alloc(sizeof(ngx_connection_t) * cycle->connection_n, cycle->log);
     if (cycle->connections == NULL) {
@@ -767,16 +770,17 @@ ngx_event_process_init(ngx_cycle_t *cycle)
     cycle->free_connection_n = cycle->connection_n;
 
     /* for each listening socket */
-
+    //遍历所有的listen fd，然后从连接池中获取一个连接并初始化为listen fd的连接
     ls = cycle->listening.elts;
     for (i = 0; i < cycle->listening.nelts; i++) {
 
 #if (NGX_HAVE_REUSEPORT)
+        //如果支持REUSEPORT选项，那么socket只能在一个worker上工作
         if (ls[i].reuseport && ls[i].worker != ngx_worker) {
             continue;
         }
 #endif
-
+        //从连接池中获取一个连接实例并进行部分初始化
         c = ngx_get_connection(ls[i].fd, cycle->log);
 
         if (c == NULL) {
@@ -937,7 +941,10 @@ ngx_send_lowat(ngx_connection_t *c, size_t lowat)
     return NGX_OK;
 }
 
-
+/*epool模块属于Event模块下面的子模块，配置文件初始化的时候，在Event解析配置文件的核心函数*/
+//ngx_event_block这个函数与上面的ngx_init_cycle以及ngx_http_block函数的结构类似，都是
+//先调用特定模块的create_conf函数，然后解析对应level的配置项（调用配置注册的函数），接着
+//调用init_conf函数实现完成模块对应配置的初始化
 static char *
 ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -966,7 +973,7 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     *(void **) conf = ctx;
-
+    /* 模块初始化，如果是NGX_EVENT_MODULE，则调用模块的create_conf方法 */
     for (i = 0; cf->cycle->modules[i]; i++) {
         if (cf->cycle->modules[i]->type != NGX_EVENT_MODULE) {
             continue;
@@ -987,7 +994,8 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     cf->ctx = ctx;
     cf->module_type = NGX_EVENT_MODULE;
     cf->cmd_type = NGX_EVENT_CONF;
-
+    /* 调用配置解析，这次解析的是 块中的内容，非文件内容 */
+    //解析配置文件中涉及NGX_EVENT_MODULE模块并执行相关配置注册的相关函数
     rv = ngx_conf_parse(cf, NULL);
 
     *cf = pcf;
@@ -995,7 +1003,10 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     if (rv != NGX_CONF_OK) {
         return rv;
     }
-
+    /* 初始化 模块的init_conf 方法*/
+    //执行NGX_EVENT_MODULE类型的模块注册的init_conf函数完成模块conf的初始化
+    //在event_core_module模块的init_conf阶段，即ngx_event_core_init_conf函数
+    //中完成了IO复用模型的选择
     for (i = 0; cf->cycle->modules[i]; i++) {
         if (cf->cycle->modules[i]->type != NGX_EVENT_MODULE) {
             continue;

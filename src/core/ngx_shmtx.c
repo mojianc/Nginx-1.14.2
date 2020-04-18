@@ -29,7 +29,7 @@ ngx_shmtx_create(ngx_shmtx_t *mtx, ngx_shmtx_sh_t *addr, u_char *name)
 #if (NGX_HAVE_POSIX_SEM)
 
     mtx->wait = &addr->wait;
-
+    //创建信号量
     if (sem_init(&mtx->sem, 1, 0) == -1) {
         ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, ngx_errno,
                       "sem_init() failed");
@@ -49,6 +49,7 @@ ngx_shmtx_destroy(ngx_shmtx_t *mtx)
 #if (NGX_HAVE_POSIX_SEM)
 
     if (mtx->semaphore) {
+        //用于对用完的信号量的清理
         if (sem_destroy(&mtx->sem) == -1) {
             ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, ngx_errno,
                           "sem_destroy() failed");

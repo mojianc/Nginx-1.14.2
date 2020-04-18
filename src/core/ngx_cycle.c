@@ -34,7 +34,7 @@ ngx_uint_t             ngx_quiet_mode;
 static ngx_connection_t  dumb;
 /* STUB */
 
-
+//在nginx主进程启动worker之前调用，用于初始化相关的配置
 ngx_cycle_t *
 ngx_init_cycle(ngx_cycle_t *old_cycle)
 {
@@ -227,6 +227,7 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
     /*
      * 核心模块的配置文件创建
      * 配置创建调用nginx.c 中的 ngx_core_module_create_conf
+     * 对类型为NGX_CORE_MODULE的模块调用对应的create_conf函数，进行申请空间之类的操作
      * */
     for (i = 0; cycle->modules[i]; i++) {
         if (cycle->modules[i]->type != NGX_CORE_MODULE) {
@@ -281,6 +282,9 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
         return NULL;
     }
     /* 解析配置文件/usr/local/nginx/conf/nginx.conf 信息 */
+    //根据上面给conf的赋值语句，ngx_conf_parse主要对配置文件NGX_MAIN_CONF这一层级的
+    //配置进行解析，并只对NGX_CORE_MODULE类型的模块中的cmd进行匹配，然后执行匹配cmd对
+    //应的函数
     if (ngx_conf_parse(&conf, &cycle->conf_file) != NGX_CONF_OK) {
         environ = senv;
         ngx_destroy_cycle_pools(&conf);
@@ -291,7 +295,7 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
         ngx_log_stderr(0, "the configuration file %s syntax is ok",
                        cycle->conf_file.data);
     }
-
+    //对类型为NGX_CORE_MODULE的模块调用对应的int_conf函数，对相关的conf结构进行初始化
     for (i = 0; cycle->modules[i]; i++) {
         if (cycle->modules[i]->type != NGX_CORE_MODULE) {
             continue;
@@ -630,7 +634,8 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
     }
 
     pool->log = cycle->log;
-
+    //调用每个模块注册的init_module函数初始化相关参数（因为这个操作在fork worker进程之前，
+     //所以初始化的参数都会被继承）
     if (ngx_init_modules(cycle) != NGX_OK) {
         /* fatal */
         exit(1);
