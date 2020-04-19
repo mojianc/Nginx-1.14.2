@@ -892,7 +892,7 @@ ngx_http_core_generic_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
         r->phase_handler = ph->next;
         return NGX_AGAIN;
     }
-
+    /* 本阶段当前的回调函数处理完成，继续执行本阶段其他回调函数*/
     if (rc == NGX_DECLINED) {
         r->phase_handler++;
         return NGX_AGAIN;
@@ -1172,7 +1172,7 @@ ngx_http_core_content_phase(ngx_http_request_t *r,
     size_t     root;
     ngx_int_t  rc;
     ngx_str_t  path;
-
+    //如果存在的话就直接执行该handler函数并跳过content阶段的其他处理函数
     if (r->content_handler) {
         r->write_event_handler = ngx_http_request_empty_handler;
         ngx_http_finalize_request(r, r->content_handler(r));
@@ -1293,7 +1293,7 @@ ngx_http_update_location_config(ngx_http_request_t *r)
     if (r->limit_rate == 0) {
         r->limit_rate = clcf->limit_rate;
     }
-
+    //如果对应command存在直接的handler函数，就直接调用
     if (clcf->handler) {
         r->content_handler = clcf->handler;
     }

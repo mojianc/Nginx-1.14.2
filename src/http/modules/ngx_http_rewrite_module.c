@@ -275,15 +275,15 @@ ngx_http_rewrite_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     return NGX_CONF_OK;
 }
 
-
+// 该函数是在rewrite的postconfiguration阶段被调用
 static ngx_int_t
 ngx_http_rewrite_init(ngx_conf_t *cf)
 {
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
-
+    //获取rewrite命令对应的core_module配置结构
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-
+    //在&cmcf->phases[NGX_HTTP_SERVER_REWRITE_PHASE].handlers指向的数组中申请一个函数指针空间
     h = ngx_array_push(&cmcf->phases[NGX_HTTP_SERVER_REWRITE_PHASE].handlers);
     if (h == NULL) {
         return NGX_ERROR;

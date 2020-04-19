@@ -914,6 +914,10 @@ ngx_filename_cmp(u_char *s1, u_char *s2, size_t n)
 }
 
 
+/* 将一串由数字组成的十进制字符串转换为整数
+   param line: 字符串的首地址
+            n: 字符串长度
+*/
 ngx_int_t
 ngx_atoi(u_char *line, size_t n)
 {
@@ -927,6 +931,7 @@ ngx_atoi(u_char *line, size_t n)
     cutlim = NGX_MAX_INT_T_VALUE % 10;
 
     for (value = 0; n--; line++) {
+        // 如果字符串中包含数字以外的字符, 说明是非法字符串, 返回NGX_ERROR
         if (*line < '0' || *line > '9') {
             return NGX_ERROR;
         }
@@ -934,7 +939,7 @@ ngx_atoi(u_char *line, size_t n)
         if (value >= cutoff && (value > cutoff || *line - '0' > cutlim)) {
             return NGX_ERROR;
         }
-
+        // value乘以10, 然后加上当前字符对应的数值
         value = value * 10 + (*line - '0');
     }
 

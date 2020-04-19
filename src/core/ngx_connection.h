@@ -122,7 +122,8 @@ typedef enum {
  * 该结构体用于描述一个网络连接
  */
 struct ngx_connection_s {
-    void               *data; //连接未使用时，data用于充当连接池中空闲链表中的next指针。连接使用时由模块而定，HTTP中，data指向ngx_http_request_t
+    void               *data; //连接未使用时，data用于充当连接池中空闲链表中的next指针。
+                              //连接使用时由模块而定，HTTP中，data指向ngx_http_request_t
     ngx_event_t        *read; //连接对应的读事件
     ngx_event_t        *write; //连接对应的写事件
 
@@ -133,7 +134,7 @@ struct ngx_connection_s {
     ngx_recv_chain_pt   recv_chain; //网络字节流接收链表
     ngx_send_chain_pt   send_chain; //网络字节流发送链表
 
-    ngx_listening_t    *listening;
+    ngx_listening_t    *listening;  // 连接对应的侦听对象
 
     off_t               sent;
 

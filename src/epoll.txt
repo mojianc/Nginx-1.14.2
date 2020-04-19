@@ -1,0 +1,93 @@
+ngx_module_t  ngx_events_module = {
+    NGX_MODULE_V1,
+    &ngx_events_module_ctx{
+        ngx_string("events"),
+        NULL,
+        ngx_event_init_conf
+    }
+    ngx_events_commands { 
+        ngx_string("events"),
+        NGX_MAIN_CONF|NGX_CONF_BLOCK|NGX_CONF_NOARGS,
+        ngx_events_block,
+        0,
+        0,
+        NULL },
+        ngx_null_command}，
+    NGX_CORE_MODULE,                       /* module type */
+    NULL,                                  /* init master */
+    NULL,                                  /* init module */
+    NULL,                                  /* init process */
+    NULL,                                  /* init thread */
+    NULL,                                  /* exit thread */
+    NULL,                                  /* exit process */
+    NULL,                                  /* exit master */
+    NGX_MODULE_V1_PADDING
+};
+
+ngx_module_t  ngx_event_core_module = {
+    NGX_MODULE_V1,
+    &ngx_event_core_module_ctx{
+        &event_core_name,
+        ngx_event_core_create_conf,            /* create configuration */
+        ngx_event_core_init_conf,              /* init configuration */
+        { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
+    }
+    ngx_event_core_commands,               /* module directives */
+    NGX_EVENT_MODULE,                      /* module type */
+    NULL,                                  /* init master */
+    ngx_event_module_init,                 /* init module */
+    ngx_event_process_init,                /* init process */
+    NULL,                                  /* init thread */
+    NULL,                                  /* exit thread */
+    NULL,                                  /* exit process */
+    NULL,                                  /* exit master */
+    NGX_MODULE_V1_PADDING
+};
+
+ngx_epoll_module{
+    NGX_MODULE_V1,
+    &ngx_epoll_module_ctx{
+        &epoll_name,
+        ngx_epoll_create_conf,               /* create configuration */
+        ngx_epoll_init_conf,                 /* init configuration */
+        ngx_event_actions_t{
+            ngx_epoll_add_event,             /* add an event */
+            ngx_epoll_del_event,             /* delete an event */
+            ngx_epoll_add_event,             /* enable an event */
+            ngx_epoll_del_event,             /* disable an event */
+            ngx_epoll_add_connection,        /* add an connection */
+            ngx_epoll_del_connection,        /* delete an connection */
+            ngx_epoll_notify,                /* trigger a notify */
+            NULL,                            /* trigger a notify */
+            ngx_epoll_process_events,        /* process the events */
+            ngx_epoll_init,                  /* init the events */
+            ngx_epoll_done,                  /* done the events */
+        }
+    }              
+    ngx_epoll_commands，
+    NGX_EVENT_MODULE,                    /* module type */
+    NULL,                                /* init master */
+    NULL,                                /* init module */
+    NULL,                                /* init process */
+    NULL,                                /* init thread */
+    NULL,                                /* exit thread */
+    NULL,                                /* exit process */
+    NULL,                                /* exit master */
+    NGX_MODULE_V1_PADDING
+}
+
+main()
+|--ngx_master_process_cycle()
+   |--ngx_start_worker_processes()
+      |--ngx_spawn_process()
+         |--pid = fork();
+         |-- proc(cycle, data);==ngx_worker_process_cycle()
+            |--ngx_worker_process_init()  初始化
+                |--cycle->modules[i]->init_process(cycle)
+                    |--ngx_event_core_module->ngx_event_process_init()
+                        |--module->actions.init(cycle, ngx_timer_resolution
+                            |--ngx_epoll_module->ngx_event_actions_t->ngx_epoll_init(); //epoll初始化
+            |--ngx_process_events_and_timers() 执行
+               |--ngx_process_events()==ngx_event_actions.process_events()
+                  |--ngx_epoll_module->ngx_epoll_process_events()   //epoll执行
+

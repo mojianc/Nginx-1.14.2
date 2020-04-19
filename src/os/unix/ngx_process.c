@@ -182,7 +182,7 @@ ngx_spawn_process(ngx_cycle_t *cycle, ngx_spawn_proc_pt proc, void *data,
 
     ngx_process_slot = s;
 
-
+    //创建worker进程
     pid = fork();
 
     switch (pid) {
@@ -196,6 +196,7 @@ ngx_spawn_process(ngx_cycle_t *cycle, ngx_spawn_proc_pt proc, void *data,
     case 0:
         ngx_parent = ngx_pid;
         ngx_pid = ngx_getpid();
+        /* 如果pid fork成功，则调用 ngx_worker_process_cycle 方法 */
         proc(cycle, data);
         break;
 
@@ -628,6 +629,9 @@ ngx_debug_point(void)
 }
 
 
+/**
+ * 处理信号
+ */
 ngx_int_t
 ngx_os_signal_process(ngx_cycle_t *cycle, char *name, ngx_pid_t pid)
 {
@@ -635,6 +639,7 @@ ngx_os_signal_process(ngx_cycle_t *cycle, char *name, ngx_pid_t pid)
 
     for (sig = signals; sig->signo != 0; sig++) {
         if (ngx_strcmp(name, sig->name) == 0) {
+            /* 通过系统调用向该进程发送信号 */
             if (kill(pid, sig->signo) != -1) {
                 return 0;
             }

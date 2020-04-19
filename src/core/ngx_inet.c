@@ -176,7 +176,13 @@ ngx_inet6_addr(u_char *p, size_t len, u_char *addr)
 
 #endif
 
-
+/* 将套接字地址转换为点分十进制字符串形式, 这里类似inet_ntop库函数的作用
+   param family: 协议族
+           addr: 通用套接字地址结构体指针
+           text: 指向用于存放字符串结果的内存空间
+            len: 用于存放字符串结果的内存空间字节大小
+   return      : 字符串结果长度
+ */
 size_t
 ngx_sock_ntop(struct sockaddr *sa, socklen_t socklen, u_char *text, size_t len,
     ngx_uint_t port)

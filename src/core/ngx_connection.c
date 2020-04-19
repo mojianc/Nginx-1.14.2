@@ -128,6 +128,9 @@ ngx_clone_listening(ngx_conf_t *cf, ngx_listening_t *ls)
 }
 
 
+/* 设置继承的套接字描述符
+   param cycle: ngx_cycle_t结构体指针
+ */
 ngx_int_t
 ngx_set_inherited_sockets(ngx_cycle_t *cycle)
 {
@@ -149,18 +152,23 @@ ngx_set_inherited_sockets(ngx_cycle_t *cycle)
 #endif
 
     ls = cycle->listening.elts;
+    // 遍历cycle的listening数组, listening数组中存放了继承的套接字描述符
     for (i = 0; i < cycle->listening.nelts; i++) {
-
+        // 从cycle使用的内存池中申请一块sockaddr_in结构体大小的内存,
+        // 从这里可以看出Nginx只支持继承IPv4套接字描述符
         ls[i].sockaddr = ngx_palloc(cycle->pool, sizeof(ngx_sockaddr_t));
         if (ls[i].sockaddr == NULL) {
+            // 内存申请失败, 返回NGX_ERROR
             return NGX_ERROR;
         }
-
+        // ngx_listening_t结构体的socklen成员用于记录套接字地址结构的长度
         ls[i].socklen = sizeof(ngx_sockaddr_t);
+        // 调用getsockname库函数获取套接字描述符的本地地址
         if (getsockname(ls[i].fd, ls[i].sockaddr, &ls[i].socklen) == -1) {
             ngx_log_error(NGX_LOG_CRIT, cycle->log, ngx_socket_errno,
                           "getsockname() of the inherited "
                           "socket #%d failed", ls[i].fd);
+            // 获取本地地址失败, 置ngx_listening_t结构体的ignore成员为1, 即表示忽略
             ls[i].ignore = 1;
             continue;
         }
@@ -214,7 +222,7 @@ ngx_set_inherited_sockets(ngx_cycle_t *cycle)
         ls[i].backlog = NGX_LISTEN_BACKLOG;
 
         olen = sizeof(int);
-
+        //获取一个套接口选项
         if (getsockopt(ls[i].fd, SOL_SOCKET, SO_TYPE, (void *) &ls[i].type,
                        &olen)
             == -1)

@@ -28,7 +28,7 @@ typedef struct {
 
 
 struct ngx_event_s {
-    void            *data;
+    void            *data;         // 事件相关的对象, 通常指向ngx_connection_t连接对象
 
     unsigned         write:1;
 
@@ -107,7 +107,7 @@ struct ngx_event_s {
     unsigned         available:1;
 #endif
 
-    ngx_event_handler_pt  handler;
+    ngx_event_handler_pt  handler;   // 核心，事件消费函数，定义如何处理事件
 
 
 #if (NGX_HAVE_IOCP)
