@@ -4,6 +4,15 @@ ngx_cycle_t
         |--ngx_event_core_module
             |--ngx_epoll_module
 
+ngx_modules[i]来源：
+./configure 生成ngx_modules.c:
+ngx_module_t *ngx_modules[]={
+    &ngx_events_module,
+    &ngx_event_core_module,
+    &ngx_epoll_module,
+    &ngx_http_module
+}
+
 ngx_module_t  ngx_events_module = {
     NGX_MODULE_V1,
     &ngx_events_module_ctx{
@@ -50,7 +59,7 @@ ngx_module_t  ngx_event_core_module = {
     NGX_MODULE_V1_PADDING
 };
 
-ngx_epoll_module{
+ngx_module_t ngx_epoll_module{
     NGX_MODULE_V1,
     &ngx_epoll_module_ctx{
         &epoll_name,

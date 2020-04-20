@@ -218,7 +218,7 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
      *  （2）创建核心配置结构，Nginx的核心配置会放到ngx_core_conf_t  *ccf数据结构上
      *  （3）初始化核心配置结构ngx_core_conf_t  *
      */
-    /* 创建模块以及创建模块的配置信息 */
+    /* 创建模块以及创建模块的配置信息：cycle->modules[] = ngx_modules[]*/
     if (ngx_cycle_modules(cycle) != NGX_OK) {
         ngx_destroy_pool(pool);
         return NULL;

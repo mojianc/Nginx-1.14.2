@@ -172,11 +172,11 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
     fd = NGX_INVALID_FILE;
     prev = NULL;
 #endif
-
+    //filename 的值为 nginx.conf 的路径
     if (filename) {
 
         /* open configuration file */
-
+        /* 打开配置文件 */
         fd = ngx_open_file(filename->data, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
 
         if (fd == NGX_INVALID_FILE) {
@@ -185,9 +185,9 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
                                filename->data);
             return NGX_CONF_ERROR;
         }
-
+        //保存cf->conf_file 的上文
         prev = cf->conf_file;
-
+        //定义cf->conf_file 当前的变量信息
         cf->conf_file = &conf_file;
 
         if (ngx_fd_info(fd, &cf->conf_file->file.info) == NGX_FILE_ERROR) {
@@ -238,8 +238,9 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
         type = parse_param;
     }
 
-
+    //完成对配置文件信息的初步设置之后，就开始对配置文件进行解析。
     for ( ;; ) {
+        //获取从配置文件nginx.conf中读取的指令名，对于 ngx_conf_read_token 下面给出来返回参数的详细英文注释
         rc = ngx_conf_read_token(cf);
 
         /*
@@ -251,11 +252,11 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
          *    NGX_CONF_BLOCK_DONE   the "}" was found
          *    NGX_CONF_FILE_DONE    the configuration file is done
          */
-
+        //如果错误，调转到done处执行
         if (rc == NGX_ERROR) {
             goto done;
         }
-
+        //如果如到“}”符号，跳转到done处执行，出现错误跳到failed处
         if (rc == NGX_CONF_BLOCK_DONE) {
 
             if (type != parse_block) {
@@ -265,7 +266,7 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
 
             goto done;
         }
-
+        //如果配置文件全部解析完成，调转到done处执行
         if (rc == NGX_CONF_FILE_DONE) {
 
             if (type == parse_block) {
@@ -276,7 +277,7 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
 
             goto done;
         }
-
+        //如果遇到“{"但出现错误，调转到failed 处执行
         if (rc == NGX_CONF_BLOCK_START) {
 
             if (type == parse_param) {
@@ -288,14 +289,16 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
         }
 
         /* rc == NGX_OK || rc == NGX_CONF_BLOCK_START */
-
+        /*前面对可能出现的情况都进行了相应的跳转，那么剩下的就是读取 指令正确后执行的过程了，主要分为两种，一种为NGX_OK 一般指令的进行如：worker_processes 
+　　　　　　另一种 NGX_CONF_BLOCK_START 就是以{作为结束符指令的执行，如：events、http 这类有二级指令的。
+　　　　　　rc == NGX_OK || rc == NGX_CONF_BLOCK_START*/
         if (cf->handler) {
 
             /*
              * the custom handler, i.e., that is used in the http's
              * "types { ... }" directive
              */
-
+            //指令执行前是否要进行些处理工作
             if (rc == NGX_CONF_BLOCK_START) {
                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "unexpected \"{\"");
                 goto failed;
@@ -340,7 +343,7 @@ done:
                           filename->data);
             rc = NGX_ERROR;
         }
-
+        //　恢复上下文
         cf->conf_file = prev;
     }
 
@@ -364,16 +367,16 @@ ngx_conf_handler(ngx_conf_t *cf, ngx_int_t last)
     name = cf->args->elts;
 
     found = 0;
-
+    /* 查找与指令想对应的模块 module*/
     for (i = 0; cf->cycle->modules[i]; i++) {
-
+        //读取模块的指令集
         cmd = cf->cycle->modules[i]->commands;
         if (cmd == NULL) {
             continue;
         }
-
+        //遍历指令集中的指令，并找寻 从配置文件中读取到的 指令相对应的 内容
         for ( /* void */ ; cmd->name.len; cmd++) {
-
+            
             if (name->len != cmd->name.len) {
                 continue;
             }
@@ -391,7 +394,7 @@ ngx_conf_handler(ngx_conf_t *cf, ngx_int_t last)
             }
 
             /* is the directive's location right ? */
-
+            /* 判断下指令类型  是否正确*/
             if (!(cmd->type & cf->cmd_type)) {
                 continue;
             }
@@ -411,7 +414,7 @@ ngx_conf_handler(ngx_conf_t *cf, ngx_int_t last)
             }
 
             /* is the directive's argument count right ? */
-
+            /*判断指令参数是否正确*/
             if (!(cmd->type & NGX_CONF_ANY)) {
 
                 if (cmd->type & NGX_CONF_FLAG) {
@@ -443,7 +446,7 @@ ngx_conf_handler(ngx_conf_t *cf, ngx_int_t last)
             }
 
             /* set up the directive's configuration context */
-
+            //通过指令的类型，来设置执行指令时需要的 模块前期创建的 cf_ctx里面的配置信息，朔源就是 cycle->conf_ctx 当然它指向的 上下文 可能已经发生了改变
             conf = NULL;
 
             if (cmd->type & NGX_DIRECT_CONF) {
@@ -459,17 +462,21 @@ ngx_conf_handler(ngx_conf_t *cf, ngx_int_t last)
                     conf = confp[cf->cycle->modules[i]->ctx_index];
                 }
             }
-
+            /*执行指令对应的  功能函数！！
+              例如：ngx_events_module->ngx_events_commands->ngx_events_block()
+              ngx_event_core_module->ngx_event_core_commands->ngx_event_connections()
+              ngx_epoll_module->ngx_epoll_commands->ngx_conf_set_num_slot()
+             */
             rv = cmd->set(cf, cmd, conf);
-
+            //如果执行成功，返回 成功。
             if (rv == NGX_CONF_OK) {
                 return NGX_OK;
             }
-
+             //至此，配置文件的指令执行就结束了。后面都是一些出错处理
             if (rv == NGX_CONF_ERROR) {
                 return NGX_ERROR;
             }
-
+           
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                "\"%s\" directive %s", name->data, rv);
 

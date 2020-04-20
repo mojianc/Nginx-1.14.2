@@ -55,7 +55,7 @@ ngx_cycle_modules(ngx_cycle_t *cycle)
     if (cycle->modules == NULL) {
         return NGX_ERROR;
     }
-
+    //将ngx_modules.c中的ngx_modules数组拷贝给cycle->modules,ngx_modules.c是通过./configure生成的
     ngx_memcpy(cycle->modules, ngx_modules,
                ngx_modules_n * sizeof(ngx_module_t *));
 
