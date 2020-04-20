@@ -18,7 +18,7 @@ static void ngx_debug_accepted_connection(ngx_event_conf_t *ecf,
     ngx_connection_t *c);
 #endif
 
-//接受新的连接
+//接受新的连接，每个监听待连接事件的回调函数都是 ngx_event_accept，一旦监听到客户端发来的连接请求，就会调用该回调方法
 void
 ngx_event_accept(ngx_event_t *ev)
 {
@@ -35,8 +35,10 @@ ngx_event_accept(ngx_event_t *ev)
 #if (NGX_HAVE_ACCEPT4)
     static ngx_uint_t  use_accept4 = 1;
 #endif
-
+    /* 若事件已经超时 */
     if (ev->timedout) {
+        /* 则遍历 ngx_cycle_t 成员 listening 保存的需要监听的端口，将
+         * 还未活跃的读事件添加到 epoll 监听对象中 */
         if (ngx_enable_accept_events((ngx_cycle_t *) ngx_cycle) != NGX_OK) {
             return;
         }
@@ -67,6 +69,7 @@ ngx_event_accept(ngx_event_t *ev)
             s = accept(lc->fd, &sa.sockaddr, &socklen);
         }
 #else
+        /* 调用 accept 方法试图建立新连接，如果没有准备好的新连接事件，则直接返回 */
         s = accept(lc->fd, &sa.sockaddr, &socklen);
 #endif
 
@@ -157,7 +160,7 @@ ngx_event_accept(ngx_event_t *ev)
 #if (NGX_STAT_STUB)
         (void) ngx_atomic_fetch_add(ngx_stat_active, 1);
 #endif
-
+        /* 为该连接建立内存池，在这个连接释放到空闲连接池时，释放 pool 内存池 */
         c->pool = ngx_create_pool(ls->pool_size, ev->log);
         if (c->pool == NULL) {
             ngx_close_accepted_connection(c);
@@ -167,7 +170,7 @@ ngx_event_accept(ngx_event_t *ev)
         if (socklen > (socklen_t) sizeof(ngx_sockaddr_t)) {
             socklen = sizeof(ngx_sockaddr_t);
         }
-
+        /* 将客户端的地址信息拷贝到 c->sockaddr 中 */
         c->sockaddr = ngx_palloc(c->pool, socklen);
         if (c->sockaddr == NULL) {
             ngx_close_accepted_connection(c);
@@ -195,6 +198,7 @@ ngx_event_accept(ngx_event_t *ev)
             }
 
         } else {
+            /* 设置套接字的属性，如设为非阻塞套接字 */
             if (!(ngx_event_flags & NGX_USE_IOCP_EVENT)) {
                 if (ngx_nonblocking(s) == -1) {
                     ngx_log_error(NGX_LOG_ALERT, ev->log, ngx_socket_errno,
@@ -206,7 +210,7 @@ ngx_event_accept(ngx_event_t *ev)
         }
 
         *log = ls->log;
-
+        /* 初始化该连接处理 I/O 的方法 */
         c->recv = ngx_recv;
         c->send = ngx_send;
         c->recv_chain = ngx_recv_chain;
@@ -233,7 +237,7 @@ ngx_event_accept(ngx_event_t *ev)
 
         rev = c->read;
         wev = c->write;
-
+        /* 置为 1，表示当前写事件已经准备就绪 */
         wev->ready = 1;
 
         if (ngx_event_flags & NGX_USE_IOCP_EVENT) {
@@ -264,7 +268,7 @@ ngx_event_accept(ngx_event_t *ev)
 #if (NGX_STAT_STUB)
         (void) ngx_atomic_fetch_add(ngx_stat_handled, 1);
 #endif
-
+        /* 将网络字节序的地址转换为主机字节序的字符串形式的地址 */
         if (ls->addr_ntop) {
             c->addr_text.data = ngx_pnalloc(c->pool, ls->addr_text_max_len);
             if (c->addr_text.data == NULL) {
@@ -299,7 +303,8 @@ ngx_event_accept(ngx_event_t *ev)
 
         }
 #endif
-        //将新建的连接通过ngx_add_conn函数指针加入到IO复用函数的等待队列中
+         /* 将这个连接的读/写事件都添加到 epoll 等事件驱动模块中，这样，在这个连接上
+         * 如果接收到用户请求，epoll_wait 就会收集到这个事件 */
         if (ngx_add_conn && (ngx_event_flags & NGX_USE_EPOLL_EVENT) == 0) {
             if (ngx_add_conn(c) == NGX_ERROR) {
                 ngx_close_accepted_connection(c);
@@ -309,13 +314,15 @@ ngx_event_accept(ngx_event_t *ev)
 
         log->data = NULL;
         log->handler = NULL;
-        //ls对应的handler是在ngx_http_add_listening函数中将ngx_http_init_connection函数赋值给了handler
+        /* 调用监听对象的 ngx_listening_t 中的 handler 回调方法。ngx_listening_t 结构体 
+         * 的 handler 回调方法就是当新的 TCP 连接刚刚建立完成时在这里调用的 */
         ls->handler(c);
 
         if (ngx_event_flags & NGX_USE_KQUEUE_EVENT) {
             ev->available--;
         }
-
+    /* 如果监听事件的 available 标志位为 1，再次循环到开始，否则结束。
+     * 当 available 为 1 时，表示尽可能一次性尽量多地建立新连接 */
     } while (ev->available);
 }
 
@@ -661,23 +668,28 @@ ngx_event_recvmsg(ngx_event_t *ev)
 ngx_int_t
 ngx_trylock_accept_mutex(ngx_cycle_t *cycle)
 {  
-    /**
-	 * 拿到锁
-     */
+    /* 使用进程间的同步锁，试图获取 accept_mutex 锁。注意，ngx_shmtx_trylock 返回 1 表示成功拿到锁，
+     * 返回 0 表示获取锁失败。这个获取锁的过程是非阻塞的，此时一旦锁被其他 worker 子进程占用，
+     * ngx_shmtx_trylock 方法会立即返回 */
     if (ngx_shmtx_trylock(&ngx_accept_mutex)) {
 
         ngx_log_debug0(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
                        "accept mutex locked");
-        /* 多次进来，判断是否已经拿到锁 */
+        /* 如果获取到 accept_mutex 锁，但 ngx_accept_mutex_held 为 1，则立刻返回。
+         * ngx_accept_mutex_held 是一个标志位，当它为 1 时，表示当前进程已经获取到锁了 */
         if (ngx_accept_mutex_held && ngx_accept_events == 0) {
+            /* ngx_accept_mutex 锁之前已经获取到了，立刻返回 */
             return NGX_OK;
         }
-        /* 调用ngx_enable_accept_events，开启监听accpet事件*/
+        /* 将所有监听连接的读事件添加到当前的 epoll 等事件驱动模块中 */
         if (ngx_enable_accept_events(cycle) == NGX_ERROR) {
+            /* 若是将监听句柄添加到事件驱动模块中失败了，则应释放 ngx_accept_mutex 锁 */
             ngx_shmtx_unlock(&ngx_accept_mutex);
             return NGX_ERROR;
         }
-
+        /* 经过 ngx_enable_accept_events 方法的调用，当前进程的事件驱动模块已经开始监听所有的端口，
+         * 这时需要把 ngx_accept_mutex_held 标志位置为 1，方便本进程的其他模块了解它目前已经获取
+         * 到了锁 */
         ngx_accept_events = 0;
         ngx_accept_mutex_held = 1;
 
@@ -686,15 +698,14 @@ ngx_trylock_accept_mutex(ngx_cycle_t *cycle)
 
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
                    "accept mutex lock failed: %ui", ngx_accept_mutex_held);
-    /**
-	 * 没有拿到锁，但是ngx_accept_mutex_held=1
-     */
+    /* 如果 ngx_shmtx_trylock 返回 0，则表明获取 ngx_accept_mutex 锁失败，这时如果
+     * ngx_accept_mutex_held 标志位还为 1，即当前进程还在获取到锁的状态，这是不正确的 */
     if (ngx_accept_mutex_held) {
         /* 没有拿到锁，调用ngx_disable_accept_events，将accpet事件删除 */
         if (ngx_disable_accept_events(cycle, 0) == NGX_ERROR) {
             return NGX_ERROR;
         }
-
+        /* 在没有获取到 ngx_accept_mutex 锁时，必须把 ngx_accept_mutex_he 置为 0 */
         ngx_accept_mutex_held = 0;
     }
 

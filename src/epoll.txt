@@ -1,3 +1,9 @@
+ngx_cycle_t
+|--conf_ctx
+    |--ngx_events_module  (ngx_events_module模块除了对 events 配置项的解析外，没有做其他任何事情。)
+        |--ngx_event_core_module
+            |--ngx_epoll_module
+
 ngx_module_t  ngx_events_module = {
     NGX_MODULE_V1,
     &ngx_events_module_ctx{
@@ -87,7 +93,14 @@ main()
                     |--ngx_event_core_module->ngx_event_process_init()
                         |--module->actions.init(cycle, ngx_timer_resolution
                             |--ngx_epoll_module->ngx_event_actions_t->ngx_epoll_init(); //epoll初始化
-            |--ngx_process_events_and_timers() 执行
+                               |--epoll_create() //创建epoll
+                        |--ngx_add_event(rev, NGX_READ_EVENT, 0)
+                           |--ngx_event_actions.add()
+                               |--ngx_epoll_module->ngx_event_actions_t->ngx_epoll_add_event()
+                                 |--epoll_ctl() //添加epoll
+            |--ngx_process_events_and_timers() //执行
                |--ngx_process_events()==ngx_event_actions.process_events()
                   |--ngx_epoll_module->ngx_epoll_process_events()   //epoll执行
+                      |--ngx_epoll_module->ngx_event_actions_t->ngx_epoll_process_events()
+                         |--epoll_wait() //等待epoll返回
 

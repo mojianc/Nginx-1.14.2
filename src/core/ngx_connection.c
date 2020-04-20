@@ -1043,7 +1043,14 @@ ngx_close_listening_sockets(ngx_cycle_t *cycle)
     cycle->listening.nelts = 0;
 }
 
-
+/*
+ * 参数含义：
+ * - s：是这条连接的套接字句柄
+ * - log：记录日志的对象
+ *
+ * 执行意义：
+ * 从连接池中获取一个ngx_connection_t结构体，同时获取相应的读/写事件
+ */
 ngx_connection_t *
 ngx_get_connection(ngx_socket_t s, ngx_log_t *log)
 {
@@ -1064,6 +1071,7 @@ ngx_get_connection(ngx_socket_t s, ngx_log_t *log)
     c = ngx_cycle->free_connections;
 
     if (c == NULL) {
+         /* 从可复用连接队列尾部取出一个连接 */
         ngx_drain_connections((ngx_cycle_t *) ngx_cycle);
         c = ngx_cycle->free_connections;
     }
@@ -1075,29 +1083,30 @@ ngx_get_connection(ngx_socket_t s, ngx_log_t *log)
 
         return NULL;
     }
-
+    /* 指向下一个空闲连接 */
     ngx_cycle->free_connections = c->data;
+    /* 空闲连接数减1 */
     ngx_cycle->free_connection_n--;
 
     if (ngx_cycle->files && ngx_cycle->files[s] == NULL) {
         ngx_cycle->files[s] = c;
     }
-
+    /* 获取该空闲连接已经预分配好的读/写事件 */
     rev = c->read;
     wev = c->write;
 
     ngx_memzero(c, sizeof(ngx_connection_t));
-
+    /* 初始化该连接 */
     c->read = rev;
     c->write = wev;
     c->fd = s;
     c->log = log;
-
+    /* 先暂存该值 */
     instance = rev->instance;
-
+    /* 将rev、wev清空 */
     ngx_memzero(rev, sizeof(ngx_event_t));
     ngx_memzero(wev, sizeof(ngx_event_t));
-
+    /* 将instance标志位置为原来的相反值，以便当该连接超时时做出检测 */
     rev->instance = !instance;
     wev->instance = !instance;
 
@@ -1106,16 +1115,23 @@ ngx_get_connection(ngx_socket_t s, ngx_log_t *log)
 
     rev->data = c;
     wev->data = c;
-
+    /* 置1，表示wev事件是可写的 */
     wev->write = 1;
 
     return c;
 }
 
-
+/*
+ * 参数含义：
+ * - c：是需要回收的连接
+ *
+ * 执行意义：
+ * 将这个连接回收到连接池中
+ */
 void
 ngx_free_connection(ngx_connection_t *c)
 {
+    /* 将该连接插入到空闲连接链表的表头 */
     c->data = ngx_cycle->free_connections;
     ngx_cycle->free_connections = c;
     ngx_cycle->free_connection_n++;

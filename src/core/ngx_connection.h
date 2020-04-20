@@ -122,24 +122,32 @@ typedef enum {
  * 该结构体用于描述一个网络连接
  */
 struct ngx_connection_s {
-    void               *data; //连接未使用时，data用于充当连接池中空闲链表中的next指针。
-                              //连接使用时由模块而定，HTTP中，data指向ngx_http_request_t
-    ngx_event_t        *read; //连接对应的读事件
-    ngx_event_t        *write; //连接对应的写事件
-
-    ngx_socket_t        fd;    //套接字句柄
-
-    ngx_recv_pt         recv;  //直接接受网络字节流
-    ngx_send_pt         send;  //直接发送网络字节流
-    ngx_recv_chain_pt   recv_chain; //网络字节流接收链表
-    ngx_send_chain_pt   send_chain; //网络字节流发送链表
-
-    ngx_listening_t    *listening;  // 连接对应的侦听对象
-
+    /*连接未使用时，data用于充当连接池中空闲链表中的next指针。
+     *连接使用时由模块而定，HTTP中，data指向 ngx_http_request_t 请求 */
+    void               *data; 
+    //连接对应的读事件                          
+    ngx_event_t        *read; 
+    //连接对应的写事件
+    ngx_event_t        *write; 
+    //套接字句柄
+    ngx_socket_t        fd;   
+    //直接接受网络字节流
+    ngx_recv_pt         recv;
+    //直接发送网络字节流  
+    ngx_send_pt         send;
+    /* 以ngx_chain_t链表为参数来接收网络字符流的方法 */  
+    ngx_recv_chain_pt   recv_chain;
+    /* 以ngx_chain_t链表为参数来发送网络字符流的方法 */ 
+    ngx_send_chain_pt   send_chain; 
+     /* 这个连接对应的ngx_listening_t监听对象，此连接由listening监听端口的事件建立 */
+    ngx_listening_t    *listening; 
+    /* 这个连接已经发送出去的字节数 */
     off_t               sent;
 
     ngx_log_t          *log;
-
+    /* 内存池。一般在accept一个新连接时，会创建一个内存池，而在这个连接结束时会销毁内存池。注意，
+     * 这里所说的连接是指成功建立的TCP连接，所有的ngx_connection_t结构体都是预分配的。这个内存池
+     * 的大小将由上面的listening监听对象中的pool_size成员决定 */
     ngx_pool_t         *pool;
 
     int                 type;
