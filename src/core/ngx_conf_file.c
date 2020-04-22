@@ -466,6 +466,7 @@ ngx_conf_handler(ngx_conf_t *cf, ngx_int_t last)
               例如：ngx_events_module->ngx_events_commands->ngx_events_block()
               ngx_event_core_module->ngx_event_core_commands->ngx_event_connections()
               ngx_epoll_module->ngx_epoll_commands->ngx_conf_set_num_slot()
+              ngx_http_module->ngx_http_commands->ngx_http_block()
              */
             rv = cmd->set(cf, cmd, conf);
             //如果执行成功，返回 成功。

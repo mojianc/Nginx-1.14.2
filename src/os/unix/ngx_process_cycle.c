@@ -949,7 +949,12 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
     */
     for (i = 0; cycle->modules[i]; i++) {
         if (cycle->modules[i]->init_process) {
-            if (cycle->modules[i]->init_process(cycle) == NGX_ERROR) {
+            if (cycle->modules[i]->init_process(cycle) == NGX_ERROR) { //ngx_event_core_module->ngx_event_process_init()
+                                                                       //ngx_epoll_module->NULL
+                                                                       //ngx_core_module->NULL
+                                                                       //ngx_events_module->NULL
+                                                                       //ngx_http_module->NULL
+                                                                       //ngx_http_core_module->NULL
                 /* fatal */
                 exit(2);
             }

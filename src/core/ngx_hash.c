@@ -250,15 +250,16 @@ ngx_hash_find_combined(ngx_hash_combined_t *hash, ngx_uint_t key, u_char *name,
 /**
  * 获取元素的大小
  * 元素大小主要是ngx_hash_elt_t结构，包括：
- * 1. name的长度	(name)->key.len
+ * 1. name的长度(对齐处理)	(name)->key.len
  * 2. len的长度	其中的"+2"是要加上该结构中len字段(u_short类型)的大小
  * 3. value指针的长度	"sizeof(void *)"相当于 value的长度
  */
 #define NGX_HASH_ELT_SIZE(name)                                               \
     (sizeof(void *) + ngx_align((name)->key.len + 2, sizeof(void *)))
-
-/**
- * 初始化一个hash表
+/*
+ * @hinit：该指针指向的结构体中包含一些用于建立散列表的基本信息
+ * @names：元素关键字数组，该数组中每个元素以ngx_hash_key_t作为结构体，存储着预添加到散列表中的元素
+ * @nelts: 元素关键字数组中元素个数
  */
 ngx_int_t
 ngx_hash_init(ngx_hash_init_t *hinit, ngx_hash_key_t *names, ngx_uint_t nelts)

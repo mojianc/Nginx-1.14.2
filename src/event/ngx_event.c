@@ -338,15 +338,32 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
     if (ngx_accept_mutex_held) {
         ngx_shmtx_unlock(&ngx_accept_mutex);
     }
-
+    /* 若ngx_process_events方法执行时消耗的时间delta大于0，这时可能有新的定时器事件被触发，
+     * 因此需要调用下面该函数处理所有满足条件的定时器事件 */
     if (delta) {
+        /* 处理所有的超时事件 */
         ngx_event_expire_timers();
     }
     /**
+     * 释放锁后再处理耗时长的连接套接口上的事件
 	 *1. 普通事件都会存放在ngx_posted_events队列上
 	 *2. 这个方法是循环处理read事件列队上的read事件
      */
     ngx_event_process_posted(cycle, &ngx_posted_events);
+     /*
+     * 补充两点。
+     * 一：如果在处理新建连接事件的过程中，在监听套接口上又来了新的请求会怎么样？这没有关系，当前
+     *     进程只处理已缓存的事件，新的请求将被阻塞在监听套接口上，而前面曾提到监听套接口是以 ET
+     *     方式加入到事件监控机制里的，所以等到下一轮被哪个进程争取到锁并加到事件监控机制里时才会
+     *     触发而被抓取出来。
+     * 二：上面的代码中进行ngx_process_events()处理并处理完新建连接事件后，只是释放锁而并没有将监听
+     *     套接口从事件监控机制里删除，所以有可能在接下来处理ngx_posted_events缓存事件的过程中，互斥
+     *     锁被另外一个进程争抢到并把所有监听套接口加入到它的事件监控机制里。因此严格说来，在同一
+     *     时刻，监听套接口只可能被一个进程监控（也就是epoll_wait()这种），因此进程在处理完
+     *     ngx_posted_event缓存事件后去争用锁，发现锁被其他进程占有而争用失败，会把所有监听套接口从
+     *     自身的事件监控机制里删除，然后才进行事件监控。在同一时刻，监听套接口只可能被一个进程
+     *     监控，这就意味着Nginx根本不会受到惊群的影响，而不论Linux内核是否已经解决惊群问题。
+     */
 }
 
 /* 
@@ -611,8 +628,11 @@ ngx_event_module_init(ngx_cycle_t *cycle)
         return NGX_ERROR;
     }
 
+    
+    //函数ngx_shm_alloc是通过系统调用mmap分配的内存空间，首地址为shared；
     shared = shm.addr;
-
+    //这里创建了三个共享变量ngx_accept_mutex、ngx_connection_counter和ngx_temp_number；
+    //函数ngx_shmtx_create使得ngx_accept_mutex->lock变量指向shared；ngx_connection_counter指向shared+128字节位置处，ngx_temp_number指向shared+256字节位置处。
     ngx_accept_mutex_ptr = (ngx_atomic_t *) shared;
     ngx_accept_mutex.spin = (ngx_uint_t) -1;
     //将accept锁放到共享内存中，这样就实现了对多个进程的互斥、同步操作
@@ -730,7 +750,8 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 
         module = cycle->modules[m]->ctx;
         /* 调用epoll/kqueue等模型模块的init初始化函数,epoll调用的是ngx_epoll_init这个方法 */
-        if (module->actions.init(cycle, ngx_timer_resolution) != NGX_OK) {
+        if (module->actions.init(cycle, ngx_timer_resolution) != NGX_OK) {  // ngx_epoll_module->ngx_epoll_module_ctx->action->ngx_epoll_init()
+                                                                            // ngx_event_core_module->NULL
             /* fatal */
             exit(2);
         }
@@ -1112,7 +1133,9 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
         if (m->init_conf) {
             rv = m->init_conf(cf->cycle,
-                              (*ctx)[cf->cycle->modules[i]->ctx_index]);
+                              (*ctx)[cf->cycle->modules[i]->ctx_index]);   //ngx_event_core_module->ngx_event_core_module_ctx->ngx_event_core_init_conf()
+                                                                           //                                                 |--epoll_create()  根据平台初始化epoll
+                                                                           //ngx_epoll_module->ngx_epoll_module_ctx->ngx_epoll_init_conf()
             if (rv != NGX_CONF_OK) {
                 return rv;
             }

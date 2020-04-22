@@ -72,7 +72,12 @@ ngx_init_modules(ngx_cycle_t *cycle)
 
     for (i = 0; cycle->modules[i]; i++) {
         if (cycle->modules[i]->init_module) {
-            if (cycle->modules[i]->init_module(cycle) != NGX_OK) {
+            if (cycle->modules[i]->init_module(cycle) != NGX_OK) {  //ngx_core_module->NULL
+                                                                    //ngx_events_module->NULL
+                                                                    //ngx_event_core_module->ngx_event_module_init()
+                                                                    //ngx_epoll_module->NULL
+                                                                    //ngx_http_module->NULL
+                                                                    //ngx_http_core_module->NULL
                 return NGX_ERROR;
             }
         }

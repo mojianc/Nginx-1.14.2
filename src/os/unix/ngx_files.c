@@ -771,9 +771,12 @@ ngx_trylock_fd(ngx_fd_t fd)
     struct flock  fl;
 
     ngx_memzero(&fl, sizeof(struct flock));
-    fl.l_type = F_WRLCK;
-    fl.l_whence = SEEK_SET;
-
+    fl.l_type = F_WRLCK;     // 建立一个供写入用的锁定
+    fl.l_whence = SEEK_SET;  //以文件开头为锁定的起始位置
+    //函数原型：int fcntl(int fd, int cmd, struct flock *lock);
+    //F_SETLK 设置记录锁
+    //F_SETLK    按照指向结构体flock的指针的第三个参数arg所描述的锁的信息设置或者清除一个文件的segment锁。
+    //F_SETLK   被用来实现共享(或读)锁(F_RDLCK)或独占(写)锁(F_WRLCK)，同样可以去掉这两种锁(F_UNLCK)。如果共享锁或独占锁不能被设置，fcntl()将立即返回EAGAIN 
     if (fcntl(fd, F_SETLK, &fl) == -1) {
         return ngx_errno;
     }
@@ -798,9 +801,12 @@ ngx_lock_fd(ngx_fd_t fd)
     struct flock  fl;
 
     ngx_memzero(&fl, sizeof(struct flock));
-    fl.l_type = F_WRLCK;
-    fl.l_whence = SEEK_SET;
-
+    fl.l_type = F_WRLCK;    // 建立一个供写入用的锁定
+    fl.l_whence = SEEK_SET; //以文件开头为锁定的起始位置
+    //函数原型：int fcntl(int fd, int cmd, struct flock *lock);
+    //F_SETLKW 设置记录锁
+    //F_SETLKW   除了共享锁或独占锁被其他的锁阻塞这种情况外，这个命令和F_SETLK是一样的。如果共享锁或独占锁被其他的锁阻塞，进程将等待直到这个请求能够完成。
+    //当fcntl()正在等待文件的某个区域的时候捕捉到一个信号，如果这个信号没有被指定SA_RESTART, fcntl将被中断
     if (fcntl(fd, F_SETLKW, &fl) == -1) {
         return ngx_errno;
     }
@@ -822,9 +828,10 @@ ngx_unlock_fd(ngx_fd_t fd)
     struct flock  fl;
 
     ngx_memzero(&fl, sizeof(struct flock));
-    fl.l_type = F_UNLCK;
-    fl.l_whence = SEEK_SET;
-
+    fl.l_type = F_UNLCK;      //删除之前建立的锁定
+    fl.l_whence = SEEK_SET;   ////以文件开头为锁定的起始位置
+    //函数原型：int fcntl(int fd, int cmd, struct flock *lock);
+    //F_SETLKW 设置记录锁
     if (fcntl(fd, F_SETLK, &fl) == -1) {
         return  ngx_errno;
     }

@@ -237,7 +237,9 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
         module = cycle->modules[i]->ctx;
 
         if (module->create_conf) {
-            rv = module->create_conf(cycle); //模块回调函数，创建模块的配置信息
+            rv = module->create_conf(cycle); //模块回调函数，创建模块的配置信息,这里回调ngx_core_module->ngx_core_module_ctx->ngx_core_module_create_conf
+                                             //                                      ngx_events_module->ngx_events_module_ctx->NULL  create_conf为NULL
+                                             //                                      ngx_http_module->ngx_http_module_ctx->NULL      create_conf为NULL                 
             if (rv == NULL) {
                 ngx_destroy_pool(pool);
                 return NULL;
@@ -617,7 +619,7 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
 #endif
         }
     }
-
+    //创建socket，并bind(),listen()
     if (ngx_open_listening_sockets(cycle) != NGX_OK) {
         goto failed;
     }

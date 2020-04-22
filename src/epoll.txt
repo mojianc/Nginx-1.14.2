@@ -13,6 +13,23 @@ ngx_module_t *ngx_modules[]={
     &ngx_http_module
 }
 
+NGX_CORE_MODULE
+   |--ngx_core_module
+   |--ngx_events_module
+   |--ngx_http_module
+   |--ngx_stream_module
+   |--ngx_google_perftools_module
+   |--ngx_mail_module
+   |--ngx_openssl_module
+   |--ngx_thread_pool_module
+   |--ngx_regex_module
+   |--ngx_errlog_module
+
+NGX_EVENT_MODULE
+   |--ngx_epoll_module
+   |--ngx_event_core_module
+   
+
 ngx_module_t  ngx_events_module = {
     NGX_MODULE_V1,
     &ngx_events_module_ctx{
