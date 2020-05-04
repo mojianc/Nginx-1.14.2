@@ -50,9 +50,9 @@ typedef struct {
 
 
 typedef struct {
-    ngx_str_t         key;
-    ngx_uint_t        key_hash;
-    void             *value;
+    ngx_str_t         key;       /* 元素关键字 */
+    ngx_uint_t        key_hash;  /* 由散列方法算出来的关键码 */
+    void             *value;     /* 指向实际的用户数据 */
 } ngx_hash_key_t;
 
 

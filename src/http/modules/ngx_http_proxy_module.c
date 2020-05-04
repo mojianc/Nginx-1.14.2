@@ -837,7 +837,7 @@ static ngx_path_init_t  ngx_http_proxy_temp_path = {
     ngx_string(NGX_HTTP_PROXY_TEMP_PATH), { 1, 2, 0 }
 };
 
-
+//当ngx需要执行反向代理，向后端apache或者tomcat之类发起请求
 static ngx_int_t
 ngx_http_proxy_handler(ngx_http_request_t *r)
 {

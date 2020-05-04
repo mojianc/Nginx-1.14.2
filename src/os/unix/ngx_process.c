@@ -481,7 +481,10 @@ ngx_process_get_status(void)
     one = 0;
 
     for ( ;; ) {
-        pid = waitpid(-1, &status, WNOHANG);
+        //这个waitpid说白了获取子进程的终止状态，这样，子进程就不会成为僵尸进程了；
+        pid = waitpid(-1, &status, WNOHANG);  //第一个参数为-1，表示等待任何子进程，
+                                              //第二个参数：保存子进程的状态信息
+                                              //第三个参数：提供额外选项，WNOHANG表示不要阻塞，让这个waitpid()立即返回
 
         if (pid == 0) {
             return;

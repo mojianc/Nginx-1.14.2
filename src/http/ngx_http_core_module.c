@@ -176,7 +176,7 @@ static ngx_str_t  ngx_http_gzip_private = ngx_string("private");
 
 #endif
 
-
+//ngx_command_t 包含了所有ngx主配置文件涉及的关键字已经处理这个关键字的函数
 static ngx_command_t  ngx_http_core_commands[] = {
 
     { ngx_string("variables_hash_max_size"),

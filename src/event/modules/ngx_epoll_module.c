@@ -952,16 +952,17 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
         }
         /* 取出写事件 */
         wev = c->write;
-
+         /* 如果写事件且事件是活跃的 */
         if ((revents & EPOLLOUT) && wev->active) {
-
+            /* 检测该事件是否是过期的 */
             if (c->fd == -1 || wev->instance != instance) {
 
                 /*
                  * the stale event from a file descriptor
                  * that was just closed in this iteration
                  */
-
+                /* 如果 fd 描述符为 -1 或者 instance 标志位不相等时，表示这个
+                 * 事件是过期的，不用处理 */
                 ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
                                "epoll: stale event %p", c);
                 continue;
@@ -973,6 +974,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
 #endif
             //如果设置了NGX_POST_EVENTS就说明当前持有accept锁，应当将新事件放到队列中，尽快返回
             if (flags & NGX_POST_EVENTS) {
+                 /* 将该写事件添加到延迟执行队列中 */
                 ngx_post_event(wev, &ngx_posted_events);
 
             } else {

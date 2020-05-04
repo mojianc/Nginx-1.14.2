@@ -288,7 +288,7 @@ ngx_http_rewrite_init(ngx_conf_t *cf)
     if (h == NULL) {
         return NGX_ERROR;
     }
-
+     //将函数添加到数组中新申请的元素中
     *h = ngx_http_rewrite_handler;
 
     h = ngx_array_push(&cmcf->phases[NGX_HTTP_REWRITE_PHASE].handlers);

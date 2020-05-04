@@ -126,18 +126,19 @@ struct ngx_event_s {
     /* 标志位，在epoll事件驱动机制下表示一次尽可能多地建立TCP连接，它与multi_accept配置项对应 */
     unsigned         available:1;
 #endif
-
+    /* 这个事件发生时的处理方法，每个事件消费模块都会重新实现它 */
     ngx_event_handler_pt  handler;   // 核心，事件消费函数，定义如何处理事件    
 
 
 #if (NGX_HAVE_IOCP)
+    /* Windos系统下的一种事件驱动模型 */
     ngx_event_ovlp_t ovlp;
 #endif
 
     ngx_uint_t       index;
 
     ngx_log_t       *log;
-
+    /* 定时器节点，用于定时器红黑树中 */
     ngx_rbtree_node_t   timer;
 
     /* the posted queue */

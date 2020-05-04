@@ -241,7 +241,7 @@ ngx_thread_task_post(ngx_thread_pool_t *tp, ngx_thread_task_t *task)
     if (ngx_thread_mutex_lock(&tp->mtx, tp->log) != NGX_OK) {
         return NGX_ERROR;
     }
-
+    //判断当前线程池等待的任务数量与最大队列长度的关系
     if (tp->waiting >= tp->max_queue) {
         (void) ngx_thread_mutex_unlock(&tp->mtx, tp->log);
 
@@ -250,12 +250,12 @@ ngx_thread_task_post(ngx_thread_pool_t *tp, ngx_thread_task_t *task)
                       &tp->name, tp->waiting);
         return NGX_ERROR;
     }
-
+    //激活任务
     task->event.active = 1;
 
     task->id = ngx_thread_pool_task_id++;
     task->next = NULL;
-
+    //通知阻塞的线程有新事件加入，可以解除阻塞
     if (ngx_thread_cond_signal(&tp->cond, tp->log) != NGX_OK) {
         (void) ngx_thread_mutex_unlock(&tp->mtx, tp->log);
         return NGX_ERROR;
