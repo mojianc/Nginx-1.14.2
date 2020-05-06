@@ -979,7 +979,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
 
             } else {
                 //没有持有accept锁，可以同步执行事件处理函数
-                //rev->handler在ngx_http_init_connection函数中被赋值为ngx_http_wait_request_handler
+                //rev->handler在ngx_http_init_connection函数中被赋值为ngx_http_wait_request_handler(原名ngx_http_wait_request_handler)
                 wev->handler(wev);
             }
         }

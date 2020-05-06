@@ -25,7 +25,7 @@ static ngx_int_t ngx_http_request_body_length_filter(ngx_http_request_t *r,
 static ngx_int_t ngx_http_request_body_chunked_filter(ngx_http_request_t *r,
     ngx_chain_t *in);
 
-
+//接收http包体
 ngx_int_t
 ngx_http_read_client_request_body(ngx_http_request_t *r,
     ngx_http_client_body_handler_pt post_handler)
@@ -39,7 +39,8 @@ ngx_http_read_client_request_body(ngx_http_request_t *r,
     ngx_http_core_loc_conf_t  *clcf;
 
     r->main->count++;
-
+    //如果r->request_body为1，证明已经读取过http包体了，不需要再次读取一遍了，跳过
+    //如果r->discard_body为1，证明曾经执行过丢弃包体的方法，现在包体正在被丢弃，跳过
     if (r != r->main || r->request_body || r->discard_body) {
         r->request_body_no_buffering = 0;
         post_handler(r);
@@ -178,10 +179,10 @@ ngx_http_read_client_request_body(ngx_http_request_t *r,
         rc = NGX_HTTP_INTERNAL_SERVER_ERROR;
         goto done;
     }
-
+    //r->read_event_handler指向ngx_http_read_client_request_body_handler，意味着如果epoll再次检测到读事件或者读事件的定时器超时，http框架将调用ngx_http_read_client_request_body_handler处理
     r->read_event_handler = ngx_http_read_client_request_body_handler;
     r->write_event_handler = ngx_http_request_empty_handler;
-
+    //接收包体
     rc = ngx_http_do_read_client_request_body(r);
 
 done:
@@ -259,7 +260,7 @@ ngx_http_read_client_request_body_handler(ngx_http_request_t *r)
     }
 }
 
-
+//接收包体，该方法的意义在于把客户端与nginx之间tcp连接上套接字缓冲区的当前的字符流全部读出来，并判断是否需要写入文件，以及是否接收到全部的包体，同时在接收到完整的包体后激活post_handler回调方法
 static ngx_int_t
 ngx_http_do_read_client_request_body(ngx_http_request_t *r)
 {
@@ -506,14 +507,14 @@ ngx_http_write_request_body(ngx_http_request_t *r)
     return NGX_OK;
 }
 
-
+//丢弃包体
 ngx_int_t
 ngx_http_discard_request_body(ngx_http_request_t *r)
 {
     ssize_t       size;
     ngx_int_t     rc;
     ngx_event_t  *rev;
-
+    //如果是子请求，则直接返回NGX_OK，表示丢弃包体成功
     if (r != r->main || r->discard_body || r->request_body) {
         return NGX_OK;
     }
@@ -532,11 +533,11 @@ ngx_http_discard_request_body(ngx_http_request_t *r)
     rev = r->connection->read;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0, "http set discard body");
-
+    //丢弃包体不用考虑超时问题，如果读事件的timer_set标志位为1，则从定时器移除此事件
     if (rev->timer_set) {
         ngx_del_timer(rev);
     }
-
+    //如果content_length头部小于或等于0，表示丢包成功
     if (r->headers_in.content_length_n <= 0 && !r->headers_in.chunked) {
         return NGX_OK;
     }
@@ -554,7 +555,7 @@ ngx_http_discard_request_body(ngx_http_request_t *r)
             return NGX_OK;
         }
     }
-
+    //接收包体
     rc = ngx_http_read_discarded_request_body(r);
 
     if (rc == NGX_OK) {
@@ -567,14 +568,15 @@ ngx_http_discard_request_body(ngx_http_request_t *r)
     }
 
     /* rc == NGX_AGAIN */
-
+    //需要多次的调用才能完成丢弃包体这一动作，需要将r->read_event_handler设置为ngx_http_discarded_request_body_handler
     r->read_event_handler = ngx_http_discarded_request_body_handler;
-
+    //把读事件添加到epoll
     if (ngx_handle_read_event(rev, 0) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
+    //引用计数+1，防止这边还在丢弃包体，而其他事件却已让请求意外销毁，引发严重问题
     r->count++;
+    //表示正在丢弃包体
     r->discard_body = 1;
 
     return NGX_OK;
@@ -592,7 +594,7 @@ ngx_http_discarded_request_body_handler(ngx_http_request_t *r)
 
     c = r->connection;
     rev = c->read;
-
+    
     if (rev->timedout) {
         c->timedout = 1;
         c->error = 1;
@@ -613,7 +615,7 @@ ngx_http_discarded_request_body_handler(ngx_http_request_t *r)
     } else {
         timer = 0;
     }
-
+    //接收包体
     rc = ngx_http_read_discarded_request_body(r);
 
     if (rc == NGX_OK) {
@@ -630,7 +632,7 @@ ngx_http_discarded_request_body_handler(ngx_http_request_t *r)
     }
 
     /* rc == NGX_AGAIN */
-
+    //走到这里，说明仍然需要把读事件添加到epoll中，期待新的可读事件到来
     if (ngx_handle_read_event(rev, 0) != NGX_OK) {
         c->error = 1;
         ngx_http_finalize_request(r, NGX_ERROR);
@@ -669,15 +671,18 @@ ngx_http_read_discarded_request_body(ngx_http_request_t *r)
     b.temporary = 1;
 
     for ( ;; ) {
+        //content_length_n为0，表示已经接收到完整的包体
         if (r->headers_in.content_length_n == 0) {
+            //如果再有可读事件被触发时，不做任何处理
             r->read_event_handler = ngx_http_block_reading;
+            //告诉上层的函数丢弃了所有包体
             return NGX_OK;
         }
-
+        //如果连接套接字的缓冲区上没有可读内容，则返回NGX_AGAIN
         if (!r->connection->read->ready) {
             return NGX_AGAIN;
         }
-
+        //读取包体
         size = (size_t) ngx_min(r->headers_in.content_length_n,
                                 NGX_HTTP_DISCARD_BUFFER_SIZE);
 

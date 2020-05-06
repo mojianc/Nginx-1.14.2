@@ -826,6 +826,7 @@ ngx_http_handler(ngx_http_request_t *r)
 
         r->lingering_close = (r->headers_in.content_length_n > 0
                               || r->headers_in.chunked);
+        //phase_handler序号置位0，意味着从ngx_http_phase_engine_t指定数组的第一个回调方法开始执行
         r->phase_handler = 0;
 
     } else {
@@ -858,7 +859,9 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
     cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
 
     ph = cmcf->phase_engine.handlers;
-    /* 遍历解析和处理各个阶段的HTTP请求 如果返回rc==NGX_AGAIN 则交由下一个阶段处理；返回OK则返回结果 */
+    /* 遍历解析和处理各个阶段的HTTP请求 如果返回rc==NGX_AGAIN 则交由下一个阶段处理；返回OK则返回结果
+     * 可以看出ngx_http_request_t结构体中的phase_handler成员将决定执行到哪一个阶段，以及下一个阶段应当执行哪个http模块实现的内容。 
+     */
     while (ph[r->phase_handler].checker) {
 
         rc = ph[r->phase_handler].checker(r, &ph[r->phase_handler]);
@@ -872,6 +875,8 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
 
 /**
  * 内容接收阶段
+ * 有3个http阶段都使用了ngx_http_core_generic_phase作为它们的checker方法，这意味着任何试图在NGX_HTTP_POST_READ_PHASE,NGX_HTTP_PREACCESS_PHASE,
+ * NGX_HTTP_LOG_PHASE这3个阶段处理请求的http模块都需要了解ngx_http_core_generic_phase到底做了些什么
  */
 ngx_int_t
 ngx_http_core_generic_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
@@ -1742,7 +1747,7 @@ ngx_http_send_response(ngx_http_request_t *r, ngx_uint_t status,
     return ngx_http_output_filter(r, &out);
 }
 
-
+//把http响应中的应答行，头部，包体发送给客户端
 ngx_int_t
 ngx_http_send_header(ngx_http_request_t *r)
 {
@@ -1760,11 +1765,13 @@ ngx_http_send_header(ngx_http_request_t *r)
         r->headers_out.status = r->err_status;
         r->headers_out.status_line.len = 0;
     }
-
+    //依次调用了所有头部过滤块组成的链表，最后一个头部过滤块叫做ngx_http_header_filter_module模块，之前的头部过滤块会根据特性去修改表示请求的
+    //ngx_http_request_t结构体中的headers_out成员里的内容，而最后一个头部过滤块ngx_http_header_filter_module提供的ngx_http_header_filter方法
+    //则会根据http规则把header_out中的成员变量序列化为字符流，并发送出去
     return ngx_http_top_header_filter(r);
 }
 
-
+//发送响应包体，第二个参数用于存放响应包体的缓冲区
 ngx_int_t
 ngx_http_output_filter(ngx_http_request_t *r, ngx_chain_t *in)
 {
@@ -1775,7 +1782,7 @@ ngx_http_output_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,
                    "http output filter \"%V?%V\"", &r->uri, &r->args);
-
+    //用于过滤包体的http模块以ngx_http_next_body_filter作为链表指针连接成一个流水线，依次调用各个过滤包体方法，其中最后一个过滤包体方法是ngx_http_write_filter，属于ngx_http_write_filter_module模块
     rc = ngx_http_top_body_filter(r, in);
 
     if (rc == NGX_ERROR) {
@@ -2531,7 +2538,8 @@ ngx_http_named_location(ngx_http_request_t *r, ngx_str_t *name)
     return NGX_DONE;
 }
 
-
+//用于向请求中添加ngx_http_cleanup_t结构体
+//返回的就是已经插入请求的ngx_http_cleanup_t结构体指针，其中data成员指向的内存都已经分配好，内存的大小由size指定
 ngx_http_cleanup_t *
 ngx_http_cleanup_add(ngx_http_request_t *r, size_t size)
 {

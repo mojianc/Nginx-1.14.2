@@ -161,6 +161,7 @@ ngx_http_header_filter(ngx_http_request_t *r)
     ngx_str_t                  host, *status_line;
     ngx_buf_t                 *b;
     ngx_uint_t                 status, i, port;
+    //保存没有发送完的（剩余的）响应头部
     ngx_chain_t                out;
     ngx_list_part_t           *part;
     ngx_table_elt_t           *header;
@@ -168,21 +169,25 @@ ngx_http_header_filter(ngx_http_request_t *r)
     ngx_http_core_loc_conf_t  *clcf;
     ngx_http_core_srv_conf_t  *cscf;
     u_char                     addr[NGX_SOCKADDR_STRLEN];
-
+    //header_sent为1，表示这个请求的响应头已经发送过了，不需要再发送了
     if (r->header_sent) {
         return NGX_OK;
     }
-
+    //为了防止反复的发送响应头部
     r->header_sent = 1;
-
+    //只有原始请求才发送请求头部；如果请求只是一个子请求，它是不存在发送http响应头部这个概念的。
     if (r != r->main) {
         return NGX_OK;
     }
-
+    //如果http版本小于1.0，同样不需要发送响应头部
     if (r->http_version < NGX_HTTP_VERSION_10) {
         return NGX_OK;
     }
-
+    /**以下大片代码主要是：
+     * 1.根据headers_out结构体中的错误码、http头部字符串，计算出如果把响应头部序列化为一个字符串共需要多少字节
+     * 2.在请求的内存池中分配计算出的缓冲区
+     * 3.将响应行、头部按照http的规范序列化地复制到缓冲区
+     */
     if (r->method == NGX_HTTP_HEAD) {
         r->header_only = 1;
     }
@@ -616,7 +621,7 @@ ngx_http_header_filter(ngx_http_request_t *r)
 
     out.buf = b;
     out.next = NULL;
-
+    //将响应头部发送出去，这个方法是包体过滤模块列表中的最后一个模块ngx_http_write_filter_module的处理方法，当http模块调用ngx_http_output_filter方法发送包体时，最终也是通过该方法发送响应的。
     return ngx_http_write_filter(r, &out);
 }
 

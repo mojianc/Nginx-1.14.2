@@ -1153,7 +1153,7 @@ ngx_close_connection(ngx_connection_t *c)
         ngx_log_error(NGX_LOG_ALERT, c->log, 0, "connection already closed");
         return;
     }
-
+    //检查读/写事件的time_set标志位，如果为1，则证明在定时器中，那么调用ngx_del_timer方法把事件从定时器中移除
     if (c->read->timer_set) {
         ngx_del_timer(c->read);
     }
@@ -1164,6 +1164,7 @@ ngx_close_connection(ngx_connection_t *c)
 
     if (!c->shared) {
         if (ngx_del_conn) {
+            //将读/写事件从epoll中移除
             ngx_del_conn(c, NGX_CLOSE_EVENT);
 
         } else {
@@ -1191,7 +1192,7 @@ ngx_close_connection(ngx_connection_t *c)
     ngx_reusable_connection(c, 0);
 
     log_error = c->log_error;
-
+    //将c结构体归还给ngx_cycle_t核心结构体的空闲连接池free_connections
     ngx_free_connection(c);
 
     fd = c->fd;
@@ -1200,7 +1201,7 @@ ngx_close_connection(ngx_connection_t *c)
     if (c->shared) {
         return;
     }
-
+    //调用系统提供的close方法关闭这个TCP连接套接字
     if (ngx_close_socket(fd) == -1) {
 
         err = ngx_socket_errno;

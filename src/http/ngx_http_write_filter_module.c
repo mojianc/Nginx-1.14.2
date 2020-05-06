@@ -43,7 +43,7 @@ ngx_module_t  ngx_http_write_filter_module = {
     NGX_MODULE_V1_PADDING
 };
 
-
+//将响应头部发送出去
 ngx_int_t
 ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
 {
@@ -55,7 +55,7 @@ ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
     ngx_http_core_loc_conf_t  *clcf;
 
     c = r->connection;
-
+    //error为1表示请求出错
     if (c->error) {
         return NGX_ERROR;
     }
@@ -67,7 +67,7 @@ ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
     ll = &r->out;
 
     /* find the size, the flush point and the last link of the saved chain */
-
+    //遍历ngx_chain_t类型的缓冲区链表，计算出out缓冲区共占用了多大的字节数
     for (cl = r->out; cl; cl = cl->next) {
         ll = &cl->next;
 
@@ -116,7 +116,7 @@ ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
     }
 
     /* add the new chain to the existent one */
-
+    //将in中的缓冲区加入到out链表的末尾，并计算out缓冲区共占用多大字节
     for (ln = in; ln; ln = ln->next) {
         cl = ngx_alloc_chain_link(r->pool);
         if (cl == NULL) {
@@ -217,18 +217,22 @@ ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
         return NGX_ERROR;
     }
-
+    //limit_rate表示需要限速，首先需要计算当前请求的发送速度是否已经达到限速条件
     if (r->limit_rate) {
         if (r->limit_rate_after == 0) {
             r->limit_rate_after = clcf->limit_rate_after;
         }
-
+        // limit_rate 和 limit_rate_after 在nginx.conf中配置，limit_rate 表示每秒可以发送的字节数，超过这个数字就需要限速；
+        //然而限速这个动作必须是在发送limit_rete_after字节的响应后才能生效（对于小响应包的优化设计）
         limit = (off_t) r->limit_rate * (ngx_time() - r->start_sec + 1)
                 - (c->sent - r->limit_rate_after);
-
+        //limit小于或等于0，表示这个连接上的发送响应速度已经超出了limit_rate配置项的限制，所以本次不可以继续发送；如果大于0，表示可以发送limit字节的响应
         if (limit <= 0) {
+            //由于达到发送响应的速度上限，这是将连接上写事件的delayed标志位设置为1
             c->write->delayed = 1;
+            //delay是超发字节数按照limit_rate速率算出需要等待的时间在加上1毫秒
             delay = (ngx_msec_t) (- limit * 1000 / r->limit_rate + 1);
+            //这个定时器的超时时间,可以使nginx定时器准确的在允许发送响应时激活请求
             ngx_add_timer(c->write, delay);
 
             c->buffered |= NGX_HTTP_WRITE_BUFFERED;
@@ -250,7 +254,7 @@ ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0,
                    "http write filter limit %O", limit);
-
+    //将响应发送给客户端
     chain = c->send_chain(c, r->out, limit);
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0,
@@ -260,7 +264,7 @@ ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
         c->error = 1;
         return NGX_ERROR;
     }
-
+    //发送响应后再次检查请求的limit_rate标志位，如果为0，表示不需要限速
     if (r->limit_rate) {
 
         nsent = c->sent;
@@ -294,13 +298,13 @@ ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
         c->write->delayed = 1;
         ngx_add_timer(c->write, 1);
     }
-
+    //重置out缓冲区，把已经发送成功的缓冲区归还给内存池
     for (cl = r->out; cl && cl != chain; /* void */) {
         ln = cl;
         cl = cl->next;
         ngx_free_chain(r->pool, ln);
     }
-
+    //如果out链表中还有剩余的没有发送出去的缓冲区，则添加到out链表头部
     r->out = chain;
 
     if (chain) {

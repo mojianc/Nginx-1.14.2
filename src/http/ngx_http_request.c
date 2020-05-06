@@ -201,7 +201,7 @@ ngx_http_header_t  ngx_http_headers_in[] = {
     { ngx_null_string, 0, NULL }
 };
 
-
+//http框架处理请求的第一步，传入的参数c就是新建的连接
 void
 ngx_http_init_connection(ngx_connection_t *c)
 {
@@ -320,7 +320,9 @@ ngx_http_init_connection(ngx_connection_t *c)
     c->log_error = NGX_ERROR_INFO;
 
     rev = c->read;
+    //设置read事件回调函数；主要处理读取事件
     rev->handler = ngx_http_wait_request_handler;
+    //设置写事件的回调函数，ngx_http_empty_handler不做任何事情，这个方法只有一个用途：当业务上不需要处理写事件时，就可以将该函数设置给写事件的handler。
     c->write->handler = ngx_http_empty_handler;
 
 #if (NGX_HTTP_V2)
@@ -358,7 +360,7 @@ ngx_http_init_connection(ngx_connection_t *c)
         hc->proxy_protocol = 1;
         c->log->action = "reading PROXY protocol";
     }
-
+    //如果ready为1，表示这个连接对应的套接字缓存上已经有用户发来的数据，这时就可以调用ngx_http_wait_request_handler方法处理了
     if (rev->ready) {
         /* the deferred accept(), iocp */
 
@@ -370,10 +372,10 @@ ngx_http_init_connection(ngx_connection_t *c)
         rev->handler(rev);
         return;
     }
-
+    //将读事件添加到定时器中
     ngx_add_timer(rev, c->listening->post_accept_timeout);
     ngx_reusable_connection(c, 1);
-
+    //将读事件添加到epoll中
     if (ngx_handle_read_event(rev, 0) != NGX_OK) {
         ngx_http_close_connection(c);
         return;
@@ -384,6 +386,7 @@ ngx_http_init_connection(ngx_connection_t *c)
 /**
  * read事件回调函数；主要处理读取事件
  * 等待处理http request 数据
+ * （原名为ngx_http_init_request）
  */
 static void
 ngx_http_wait_request_handler(ngx_event_t *rev)
@@ -1043,7 +1046,8 @@ ngx_http_process_request_line(ngx_event_t *rev)
 
                 r->headers_in.server = host;
             }
-
+            //如果http_version显示用户请求的http版本小于1.0，其处理过程将于http1.0和http1.1的完全不同，它不会有接收http头部这一步骤。
+            //它将会调用ngx_http_find_virtual_server方法寻找响应的虚拟主机
             if (r->http_version < NGX_HTTP_VERSION_10) {
 
                 if (r->headers_in.server.len == 0
@@ -1052,7 +1056,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
                 {
                     return;
                 }
-
+                //由于不用接收http头部，调用ngx_http_process_request方法开始处理请求
                 ngx_http_process_request(r);
                 return;
             }
@@ -1970,7 +1974,8 @@ ngx_http_process_request(ngx_http_request_t *r)
     }
 
 #endif
-
+    //由于现在已经开始准备调用各http模块处理请求了，因此不再存在接收http请求头部超时的问题，那就需要从定时器中把当前连接的读事件移除了。
+    //timer_set为1表示读事件已经添加到定时器中，将其移除
     if (c->read->timer_set) {
         ngx_del_timer(c->read);
     }
@@ -1981,9 +1986,17 @@ ngx_http_process_request(ngx_http_request_t *r)
     (void) ngx_atomic_fetch_add(ngx_stat_writing, 1);
     r->stat_writing = 1;
 #endif
-    /* read和write事件都设置为：ngx_http_request_handler，通过事件状态来判断*/
+    /**
+     * 从现在开始已经不会再需要接收http请求行或者头部，所以需要重新设置当前连接的读写事件的回调函数方法。
+     * read和write事件都设置为：ngx_http_request_handler，通过事件状态来判断、
+     */
     c->read->handler = ngx_http_request_handler;
     c->write->handler = ngx_http_request_handler;
+     /**
+      * 当再次有读事件到来时，就会调用read_event_handler方法处理请求。
+      * 而在这里将它设置为ngx_http_block_reading方法，这个方法可以认为不做任何事，它的意义在于，目前已经开始处理http请求，
+      * 除非某个http模块重新设置了read_event_handler方法，否则任何读事件都得不到处理，也可以认为读事件被阻塞了
+     */
     r->read_event_handler = ngx_http_block_reading;
     /* http处理分发核心函数 */
     ngx_http_handler(r);
@@ -2332,7 +2345,9 @@ ngx_http_run_posted_requests(ngx_connection_t *c)
 
         ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,
                        "http posted request: \"%V?%V\"", &r->uri, &r->args);
-        /* 调用write handler.   */
+        /* 调用write handler.   
+         * 为什么是调用write_event_handler而不是read_event_handler？ 因为子请求不是被网络事件驱动的，因此执行post请求是相当于可写请求，由nginx主动做出动作
+         */
         r->write_event_handler(r);
     }
 }
@@ -2360,7 +2375,9 @@ ngx_http_post_request(ngx_http_request_t *r, ngx_http_posted_request_t *pr)
     return NGX_OK;
 }
 
-
+//开发http模块时最常用结束请求方法
+//参数r就是当前请求，它可能是派生出的子请求，也可能是客户端发送的原始请求
+//参数rc，它既可能是NGX_OK,NGX_ERROR,NGX_AGAIN,NGX_DONE,NGX_DELINED这种系统定义的返回值，又可能是类似NGX_HTTP_REQUEST_TIME_OUT这样的http响应码。
 void
 ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
 {
@@ -2382,14 +2399,15 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
     if (rc == NGX_OK && r->filter_finalize) {
         c->error = 1;
     }
-
+    //NGX_DECLINED表示请求还需要继续按照11个http阶段继续处理下去。
     if (rc == NGX_DECLINED) {
+        //将content_handler设置为NULL，是为了让ngx_http_content_phase方法可以继续调用NGX_HTTP_CONTENT_PHASE阶段的其他处理方法。
         r->content_handler = NULL;
         r->write_event_handler = ngx_http_core_run_phases;
         ngx_http_core_run_phases(r);
         return;
     }
-
+    //如果当前请求是subrequest子请求，调用post_subrequest下的handler回调方法
     if (r != r->main && r->post_subrequest) {
         rc = r->post_subrequest->handler(r, r->post_subrequest->data, rc);
     }
@@ -2411,6 +2429,7 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
         || rc == NGX_HTTP_CREATED
         || rc == NGX_HTTP_NO_CONTENT)
     {
+        //表示请求的动作是上传文件，或者http模块需要http框架构造并发送响应码大于或者等于300以上的特殊响应
         if (rc == NGX_HTTP_CLOSE) {
             ngx_http_terminate_request(r, rc);
             return;
@@ -2563,7 +2582,8 @@ ngx_http_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
     ngx_http_finalize_connection(r);
 }
 
-
+//提供给http模块使用的结束请求方法，但它属于非正常结束的场景，可以理解为强制关闭请求。也就是说，当调用ngx_http_terminate_request方法结束请求时，
+//它会直接找出该请求的main成员指向的原始请求，并直接将原始请求的引用计数置1，同时会调用ngx_http_close_request方法去关闭请求。
 static void
 ngx_http_terminate_request(ngx_http_request_t *r, ngx_int_t rc)
 {
@@ -2625,7 +2645,7 @@ ngx_http_terminate_handler(ngx_http_request_t *r)
     ngx_http_close_request(r, 0);
 }
 
-
+//该方法比ngx_http_close_request方法高一个层次，主要是在结束请求时，解决了keepalive特性和子请求的问题
 static void
 ngx_http_finalize_connection(ngx_http_request_t *r)
 {
@@ -2641,7 +2661,7 @@ ngx_http_finalize_connection(ngx_http_request_t *r)
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
     if (r->main->count != 1) {
-
+        //discard_body为1，表示正在丢弃包体
         if (r->discard_body) {
             r->read_event_handler = ngx_http_discarded_request_body_handler;
             ngx_add_timer(r->connection->read, clcf->lingering_timeout);
@@ -2662,12 +2682,13 @@ ngx_http_finalize_connection(ngx_http_request_t *r)
         r->keepalive = 0;
         r->lingering_close = 1;
     }
-
+    //如果keepalive为1，则说明这个请求需要释放，但TCP连接还是要复用的
     if (!ngx_terminate
          && !ngx_exiting
          && r->keepalive
          && clcf->keepalive_timeout > 0)
     {
+        //将当前连接设置为keeplive状态，它实际上会把表示请求的ngx_http_request_t结构体释放，却不会调用ngx_http_close_connection方法关闭连接，同时也在检测keepalive连接是否超时。
         ngx_http_set_keepalive(r);
         return;
     }
@@ -2678,6 +2699,7 @@ ngx_http_finalize_connection(ngx_http_request_t *r)
                 || r->header_in->pos < r->header_in->last
                 || r->connection->read->ready)))
     {
+        //延迟关闭请求，实际上，这个方法的意义就在于把一些必须做的事情做完（如接收用户端发来的字符流）在关闭连接
         ngx_http_set_lingering_close(r);
         return;
     }
@@ -2718,7 +2740,7 @@ ngx_http_set_write_handler(ngx_http_request_t *r)
     return NGX_OK;
 }
 
-
+//在ngx_http_send_header或者ngx_http_output_filter方法，它们在调用时一般都无法发送全部的响应，剩下的响应内容都得靠ngx_http_writer方法来发送
 static void
 ngx_http_writer(ngx_http_request_t *r)
 {
@@ -2734,12 +2756,12 @@ ngx_http_writer(ngx_http_request_t *r)
                    "http writer handler: \"%V?%V\"", &r->uri, &r->args);
 
     clcf = ngx_http_get_module_loc_conf(r->main, ngx_http_core_module);
-
+    //如果timeout为1，表示当前的写事件已经超时
     if (wev->timedout) {
         ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT,
                       "client timed out");
         c->timedout = 1;
-
+        //表示需要向客户端发送408错误码
         ngx_http_finalize_request(r, NGX_HTTP_REQUEST_TIME_OUT);
         return;
     }
@@ -2751,14 +2773,14 @@ ngx_http_writer(ngx_http_request_t *r)
         if (!wev->delayed) {
             ngx_add_timer(wev, clcf->send_timeout);
         }
-
+        //将写事件添加到epoll事件收集器中
         if (ngx_handle_write_event(wev, clcf->send_lowat) != NGX_OK) {
             ngx_http_close_request(r, 0);
         }
 
         return;
     }
-
+    //发送响应，第二个参数为需要发送的缓冲区，为NULL。意味着，需要调用各包体过滤模块处理out缓冲区中的剩余内容，最后调用ngx_http_write_filter方法把响应发送出去
     rc = ngx_http_output_filter(r, NULL);
 
     ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
@@ -2785,7 +2807,7 @@ ngx_http_writer(ngx_http_request_t *r)
 
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, wev->log, 0,
                    "http writer done: \"%V?%V\"", &r->uri, &r->args);
-
+    //r->write_event_handler指向 ngx_http_request_empty_handler，也就是说，如果这个请求的连接上再有可写事件，将不做任何处理
     r->write_event_handler = ngx_http_request_empty_handler;
 
     ngx_http_finalize_request(r, rc);
@@ -3481,12 +3503,12 @@ ngx_http_post_action(ngx_http_request_t *r)
     return NGX_OK;
 }
 
-
+//更高层的用于关闭请求的方法，检测引用计数，会在引用计数清零时正式调用ngx_http_free_request方法和ngx_http_close_connection方法来释放请求、关闭连接
 static void
 ngx_http_close_request(ngx_http_request_t *r, ngx_int_t rc)
 {
     ngx_connection_t  *c;
-
+    //原始请求
     r = r->main;
     c = r->connection;
 
@@ -3514,7 +3536,10 @@ ngx_http_close_request(ngx_http_request_t *r, ngx_int_t rc)
     ngx_http_close_connection(c);
 }
 
-
+/**
+ * ngx_http_free_request方法将会释放请求对应的ngx_http_request_t数据结构，它并不会像ngx_http_close_connection方法一样去释放承载请求的tcp连接，
+ * 每一个tcp连接可以反复的承载多个http请求，因此ngx_http_free_request是比ngx_http_close_connection更高层次的方法，前者必然先于后者调用。
+*/
 void
 ngx_http_free_request(ngx_http_request_t *r, ngx_int_t rc)
 {
@@ -3536,7 +3561,7 @@ ngx_http_free_request(ngx_http_request_t *r, ngx_int_t rc)
 
     cln = r->cleanup;
     r->cleanup = NULL;
-
+    //循环遍历请求ngx_http_request_t结构体中的cleanup链表，依次调用每一个ngx_http_cleanup_pt方法释放资源
     while (cln) {
         if (cln->handler) {
             cln->handler(cln->data);
@@ -3598,7 +3623,7 @@ ngx_http_free_request(ngx_http_request_t *r, ngx_int_t rc)
 
     pool = r->pool;
     r->pool = NULL;
-
+    //销毁请求ngx_http_request_t结构体中的pool内存池
     ngx_destroy_pool(pool);
 }
 
