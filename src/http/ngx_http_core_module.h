@@ -106,21 +106,33 @@ typedef struct {
 
 
 typedef enum {
-    NGX_HTTP_POST_READ_PHASE = 0,        /* 读取请求内容阶段 */
-
-    NGX_HTTP_SERVER_REWRITE_PHASE,       /* Server请求地址重写阶段 */
-
-    NGX_HTTP_FIND_CONFIG_PHASE,          /* 配置查找阶段 */
-    NGX_HTTP_REWRITE_PHASE,              /* Location请求地址重写阶段 */
-    NGX_HTTP_POST_REWRITE_PHASE,         /* 请求地址重写提交阶段 */
-
-    NGX_HTTP_PREACCESS_PHASE,            /* 访问权限检查准备阶段 */
-
-    NGX_HTTP_ACCESS_PHASE,               /* 访问权限检查阶段 */
-    NGX_HTTP_POST_ACCESS_PHASE,          /* 访问权限检查提交阶段 */
-
-    NGX_HTTP_PRECONTENT_PHASE,           /* 配置项try_files处理阶段 */
-
+    /* 在接收完完整的HTTP头部后处理的HTTP阶段 */
+    NGX_HTTP_POST_READ_PHASE = 0,        
+    /* Server请求地址重写阶段，在还没有查询到URI匹配的location前，这是rewrite重写URL也作为一个独立的HTTP阶段 */
+    NGX_HTTP_SERVER_REWRITE_PHASE,      
+    /* 配置查找阶段，根据URI寻找匹配的location，这个阶段通常由ngx_http_core_module模块实现，不建议其他HTTP模块重新定义这一阶段的行为 */
+    NGX_HTTP_FIND_CONFIG_PHASE,      
+    /* Location请求地址重写阶段，在NGX_HTTP_FIND_CONFIG_PHASE阶段之后重写URL的意义与NGX_HTTP_SERVER_REWRITE_PHASE想染不同
+     * 因为这两者会导致查找不同的location块（location是与URI进行匹配）
+     */    
+    NGX_HTTP_REWRITE_PHASE,
+    /* 请求地址重写提交阶段，这一阶段是用于在rewrite重写URL后重新调到NGX_HTTP_SERVER_REWRITE_PHASE阶段，找到新的URI匹配的location。
+     * 所以，这一阶段是无法有第三方HTTP模块处理的，而仅由ngx_http_core_module模块使用
+     */              
+    NGX_HTTP_POST_REWRITE_PHASE,        
+    /* 访问权限检查准备阶段，处理NGX_HTTP_ACCESS_PHASE阶段前，http模块可以介入的处理阶段 */
+    NGX_HTTP_PREACCESS_PHASE,            
+    /* 访问权限检查阶段，这个阶段用于让http模块判断是否允许这个请求访问nginx服务器 */
+    NGX_HTTP_ACCESS_PHASE,  
+    /* 访问权限检查提交阶段，当NGX_HTTP_PREACCESS_PHASE阶段中http模块的handler处理方法返回不允许访问的错误码时，
+     * （实际是NGX_HTTP_FORBIDDEN或者NGX_HTTP_UNAUTHORIZED），这个阶段将负责构造拒绝服务的用户响应。所以，这个阶段实际上用于给NGX_HTTP_ACCESS_PHASE阶段收尾
+     */             
+    NGX_HTTP_POST_ACCESS_PHASE,          
+    /* 配置项try_files处理阶段，这个阶段完全是为了try_files配置项而设立的，当http请求访问静态文件资源时，try_files配置项可以是这个请求顺序的访问多个静态文件资源，如果摸一个访问失败，
+     * 则继续访问try_files中指定的下一个静态资源。另外，这个功能完全是在NGX_HTTP_TRY_FILES_PHASE阶段中实现
+     */
+    NGX_HTTP_PRECONTENT_PHASE,           
+    //用于处理http请求内容的阶段，这是大部分http模块最喜欢介入的阶段
     NGX_HTTP_CONTENT_PHASE,              /* 内容产生阶段 */
 
     NGX_HTTP_LOG_PHASE                   /* 日志模块处理阶段 */

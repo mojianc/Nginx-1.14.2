@@ -223,33 +223,48 @@
  * 业务模块数据结构
  */
 struct ngx_module_s {
+    //ctx_index是表示当前模块在这类模块中的序号，这个成员常常是由管理这类模块的一个nginx核心模块设置的，
+    //对于所有http模块而言，ctx_index是由核心模块ngx_http_module设置的。
     ngx_uint_t            ctx_index;
+    //index表示当前模块在ngx_modules数组中的序号。注意，ctx_index表示的是当前模块在一类模块中的序号，
+    //而index表示当前模块在所有模块中的序号，nginx启动时，会根据ngx_modules数组设置各模块的index值。
+    //在ngx_preinit_modules()中初始化
     ngx_uint_t            index;             /* 模块的唯一标识符号 */
 
     char                 *name;              /* 模块名称 */
-
+    //spare系列的保留变量，暂未使用
     ngx_uint_t            spare0;
     ngx_uint_t            spare1;
-
-    ngx_uint_t            version;           /* 模块版本 */
+    
+    ngx_uint_t            version;           /* 模块版本，便于将来扩展，目前，只有一种，默认为1 */
     const char           *signature;
-
+   
     void                 *ctx;               /* 模块上下文 */
-    ngx_command_t        *commands;          /* 模块支持的命令集 */
+    ngx_command_t        *commands;          /* 模块支持的命令集，将处理nginx.conf中的配置项 */
+    /*与ctx指针是紧密相关的，在官方nginx中，它的取值范围有5种：
+     * NGX_HTTP_MODULE,NGX_CORE_MODULE,NGX_CONF_MODULE,NGX_EVENT_MODULE,NGX_MAIL_MODULE
+     */
     ngx_uint_t            type;              /* 模块类型 */
     
-     /* 回调函数 */
-    ngx_int_t           (*init_master)(ngx_log_t *log);         /* 主进程初始化的时候调用 */
-
-    ngx_int_t           (*init_module)(ngx_cycle_t *cycle);     /* 模块初始化的时候调用 */
-
-    ngx_int_t           (*init_process)(ngx_cycle_t *cycle);    /* 工作进程初始化时调用*/
-    ngx_int_t           (*init_thread)(ngx_cycle_t *cycle);     /* 线程初始化调用*/
-    void                (*exit_thread)(ngx_cycle_t *cycle);     /* 线程退出调用*/
-    void                (*exit_process)(ngx_cycle_t *cycle);    /* 工作进程退出调用*/
-
+    /* 回调函数 */
+    /* 主进程初始化的时候调用，但是目前为止框架代码从来没有调用过，因此可以设置为NULL */
+    ngx_int_t           (*init_master)(ngx_log_t *log);         
+    /* init_module回调方法在初始化所有模块时被调用。在master/worker模式下，这个阶段将在启动worker子进程前完成 */
+    ngx_int_t           (*init_module)(ngx_cycle_t *cycle);     
+    /* init_precess回调方法在正常服务前被调用。在master/worker模式下，多个worker子进程已经产生，在每个worker进程的初始化过程中会调用所有模块的init_process函数*/
+    ngx_int_t           (*init_process)(ngx_cycle_t *cycle);   
+    /* 由于nginx暂不支持多线程模式，所以init_thread在框架代码中没有被调用过，设为NULL*/
+    ngx_int_t           (*init_thread)(ngx_cycle_t *cycle);     
+    /* 同上，exit_thread也不支持，设为NULL*/
+    void                (*exit_thread)(ngx_cycle_t *cycle);     
+    /* exit_thread回调方法在服务停止前调用，在master/worker模式下，worker进程在退出前调用它*/
+    void                (*exit_process)(ngx_cycle_t *cycle);   
+    /*exit_master回调方法将在master进程退出前调用*/
     void                (*exit_master)(ngx_cycle_t *cycle);
-
+    /**
+     * 以下8个spare_hook变量是保留字段，目前没有使用，但可用nginx提供的 NGX_MODULE_V1_PADDING 宏来填充：
+     * #define NGX_MODULE_V1_PADDING  0, 0, 0, 0, 0, 0, 0, 0
+    */
     uintptr_t             spare_hook0;
     uintptr_t             spare_hook1;
     uintptr_t             spare_hook2;

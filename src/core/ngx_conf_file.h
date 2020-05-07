@@ -75,11 +75,17 @@
 
 
 struct ngx_command_s {
+    //配置项名称，如“gzip”
     ngx_str_t             name;
+    //配置项类型，type将指定配置项可以出现的位置。例如，出现在server{}或location{}中，以及它可以携带的参数个数
     ngx_uint_t            type;
+    //出现了name中指定的配置项后，将会调用set方法处理配置项的参数
     char               *(*set)(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+    //在配置文件中的偏移量
     ngx_uint_t            conf;
+    //通常用于使用预设的解析方法解析配置项，这是配置模块的一个优秀设计，它与conf配合使用
     ngx_uint_t            offset;
+    //配置项读取后的处理方法，必须是ngx_conf_post_t结构的指针
     void                 *post;
 };
 

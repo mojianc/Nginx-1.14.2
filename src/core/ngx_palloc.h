@@ -68,9 +68,9 @@ struct ngx_pool_s {
 
 
 typedef struct {
-    ngx_fd_t              fd;
-    u_char               *name;
-    ngx_log_t            *log;
+    ngx_fd_t              fd;     //文件句柄
+    u_char               *name;   //文件名称
+    ngx_log_t            *log;    //日志对象
 } ngx_pool_cleanup_file_t;
 
 
