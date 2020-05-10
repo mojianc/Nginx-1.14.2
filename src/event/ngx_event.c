@@ -733,7 +733,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
     //创建保存event的队列用于保存accept、普通事件
     ngx_queue_init(&ngx_posted_accept_events);
     ngx_queue_init(&ngx_posted_events);
-    //初始化红黑树实现的事件定时器*/
+    /*初始化计时器，此处将会创建起一颗红黑色，来维护计时器。*/   
     if (ngx_event_timer_init(cycle->log) == NGX_ERROR) {
         return NGX_ERROR;
     }
@@ -775,7 +775,10 @@ ngx_event_process_init(ngx_cycle_t *cycle)
          * ngx_event_timer_alarm 置为 0 */
         sa.sa_handler = ngx_timer_signal_handler;
         sigemptyset(&sa.sa_mask);
-
+        /*SIGALRM信号成功安装后，在什么情况下进程会收到该信号呢？这就要依赖于Linux提供的定时器功能。
+        在Linux系统下，每一个进程都有惟一的一个定时器，该定时器提供了以秒为单位的定时功能。
+        在定时器设置的超时时间到达后，调用 setitimer()的进程将收到SIGALRM信号。
+        */
         if (sigaction(SIGALRM, &sa, NULL) == -1) {
             ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                           "sigaction(SIGALRM) failed");
@@ -786,7 +789,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
         itv.it_interval.tv_usec = (ngx_timer_resolution % 1000) * 1000;
         itv.it_value.tv_sec = ngx_timer_resolution / 1000;
         itv.it_value.tv_usec = (ngx_timer_resolution % 1000 ) * 1000;
-
+        //setitimer()可用来实现延时和定时的功能;ITIMER_REAL：以系统真实的时间来计算，它送出SIGALRM信号。
         if (setitimer(ITIMER_REAL, &itv, NULL) == -1) {
             ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                           "setitimer() failed");
@@ -795,7 +798,7 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 
     if (ngx_event_flags & NGX_USE_FD_EVENT) {
         struct rlimit  rlmt;
-
+        //获取指定比进程可打开的最大文件描述符大1的值，超出此值，将会产生EMFILE错误。
         if (getrlimit(RLIMIT_NOFILE, &rlmt) == -1) {
             ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                           "getrlimit(RLIMIT_NOFILE) failed");

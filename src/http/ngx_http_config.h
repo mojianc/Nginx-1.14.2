@@ -15,16 +15,28 @@
 
 
 typedef struct {
+    /**
+     * 指向一个指针数组，数组中的每个成员都是由所有http模块的create_main_conf方法创建的存放全局配置项的结构体，
+     * 他们存放着配置直属http{}块内的main级别的配置项参数
+    */
     void        **main_conf;
+    /**
+     * 指向一个指针数组，数组中的每个成员都是由所有http模块的create_srv_conf方法创建的与server相关的结构体，
+     * 他们或存放main级别配置项，或存放srv级别配置项，这与当前的ngx_http_conf_ctx_t是在解析http{}或者server{}块时创建有关
+    */
     void        **srv_conf;
+    /**
+     * 指向一个指针数组，数组中的每个成员都是由所有http模块的create_loc_conf方法创建的与location相关的结构体，他们可能存放着main、srv、loc级别的配置项，
+     * 这与当前的ngx_http_conf_ctx_t是在解析http{},server{}或者location{}块时创建有关
+    */
     void        **loc_conf;
 } ngx_http_conf_ctx_t;
 
 
 typedef struct {
-    //解析配置文件前调用
+    //解析配置http{...}文件前调用
     ngx_int_t   (*preconfiguration)(ngx_conf_t *cf);
-    //完成配置文件的解析后调用
+    //完成配置文件http{...}的解析后调用
     ngx_int_t   (*postconfiguration)(ngx_conf_t *cf);
     //当需要创建数据结构用于存储main级别(直属于http{...}块的配置项)的全局配置项时，可以通过create_main_conf回调方法创建存储全局配置项的结构体
     void       *(*create_main_conf)(ngx_conf_t *cf);

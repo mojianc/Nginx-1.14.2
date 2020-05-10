@@ -228,7 +228,7 @@ struct ngx_module_s {
     ngx_uint_t            ctx_index;
     //index表示当前模块在ngx_modules数组中的序号。注意，ctx_index表示的是当前模块在一类模块中的序号，
     //而index表示当前模块在所有模块中的序号，nginx启动时，会根据ngx_modules数组设置各模块的index值。
-    //在ngx_preinit_modules()中初始化
+    //在 ngx_preinit_modules ()中初始化
     ngx_uint_t            index;             /* 模块的唯一标识符号 */
 
     char                 *name;              /* 模块名称 */

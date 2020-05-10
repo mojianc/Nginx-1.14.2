@@ -8,7 +8,7 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 
-
+//master进程切换成守护进程
 ngx_int_t
 ngx_daemon(ngx_log_t *log)
 {
@@ -35,7 +35,7 @@ ngx_daemon(ngx_log_t *log)
     }
 
     umask(0);
-
+    //将输入和输出都设置成黑洞
     fd = open("/dev/null", O_RDWR);
     if (fd == -1) {
         ngx_log_error(NGX_LOG_EMERG, log, ngx_errno,

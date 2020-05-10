@@ -291,6 +291,7 @@ main(int argc, char *const *argv)
      * 所以需要采用这一步添加继承的Socket套接字，套接字会放在NGINX的全局环境变量中
      * 例如：#平滑重启  
      *  sudo kill -HUP `cat /usr/local/nginx-1.4.7/nginx.pid`
+     * 在这里创建监听数组listening
      * */
     if (ngx_add_inherited_sockets(&init_cycle) != NGX_OK) {
         return 1;
@@ -1459,7 +1460,7 @@ ngx_get_cpu_affinity(ngx_uint_t n)
         mask = &ccf->cpu_affinity[ccf->cpu_affinity_n - 1];
 
         for (i = 0, j = n; /* void */ ; i++) {
-
+            //CPU_ISSET:检查一个CPU号是否在这个集合中;CPU_SETSIZE 是定义在<sched.h>中的宏，通常是1024
             if (CPU_ISSET(i % CPU_SETSIZE, mask) && j-- == 0) {
                 break;
             }
@@ -1471,8 +1472,9 @@ ngx_get_cpu_affinity(ngx_uint_t n)
 
             /* void */
         }
-
+        //清空一个集合
         CPU_ZERO(&result);
+        //将一个给定的CPU号加到一个集合
         CPU_SET(i % CPU_SETSIZE, &result);
 
         return &result;

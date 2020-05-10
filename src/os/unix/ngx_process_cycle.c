@@ -131,9 +131,10 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
 
     /* 获取核心配置 ngx_core_conf_t */
     ccf = (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module);
-    /* 启动工作进程 - 多进程启动的核心函数 */
+    /* 启动工作进程 - 多进程启动的核心函数，创建worker进程 */
     ngx_start_worker_processes(cycle, ccf->worker_processes,
                                NGX_PROCESS_RESPAWN);
+    //Cache管理进程与cache加载进程的主流程 
     ngx_start_cache_manager_processes(cycle, 0);
 
     ngx_new_binary = 0;
@@ -628,6 +629,7 @@ ngx_reap_children(ngx_cycle_t *cycle)
                 && !ngx_terminate
                 && !ngx_quit)
             {
+                //创建worker进程
                 if (ngx_spawn_process(cycle, ngx_processes[i].proc,
                                       ngx_processes[i].data,
                                       ngx_processes[i].name, i)
@@ -746,7 +748,7 @@ ngx_worker_process_cycle(ngx_cycle_t *cycle, void *data)
     ngx_worker = worker;
     //初始化worker进程
     ngx_worker_process_init(cycle, worker);
-
+    //设置进程标题
     ngx_setproctitle("worker process");
     /* 进程循环 */
     for ( ;; ) {
@@ -814,12 +816,28 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
     ccf = (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module);
 
     if (worker >= 0 && ccf->priority != 0) {
+        /**
+         * 定义函数：int setpriority(int which, int who, int prio);
+            函数说明：setpriority()可用来设置进程、进程组和用户的进程执行优先权。参数which 有三种数值, 参数who 则依which 值有不同定义。
+            which who 代表的意义：
+            1、PRIO_PROCESS who 为进程识别码
+            2、PRIO_PGRP who 为进程的组识别码
+            3、PRIO_USER who 为用户识别码
+
+            参数prio 介于-20 至20 之间. 代表进程执行优先权, 数值越低代表有较高的优先次序, 执行会较频繁. 此优先权默认是0, 而只有超级用户 (root)允许降低此值.
+            返回值：
+            执行成功则返回0, 如果有错误发生返回值则为-1, 错误原因存于errno.
+            1、ESRCH：参数which 或who 可能有错, 而找不到符合的进程
+            2、EINVAL：参数which 值错误.
+            3、EPERM：权限不够, 无法完成设置
+            4、EACCES：一般用户无法降低优先权
+        */
         if (setpriority(PRIO_PROCESS, 0, ccf->priority) == -1) {
             ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                           "setpriority(%d) failed", ccf->priority);
         }
     }
-
+    //setrlimit 设定资源使用限制,RLIMIT_NOFILE:指定进程可打开的最大文件的值，超出此值，将会产生EMFILE错误。(一个进程能打开的最大文件数，内核默认是1024)
     if (ccf->rlimit_nofile != NGX_CONF_UNSET) {
         rlmt.rlim_cur = (rlim_t) ccf->rlimit_nofile;
         rlmt.rlim_max = (rlim_t) ccf->rlimit_nofile;
@@ -830,11 +848,11 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
                           ccf->rlimit_nofile);
         }
     }
-
+    //setrlimit 设定资源使用限制,RLIMIT_CORE:内核转存文件的最大长度
     if (ccf->rlimit_core != NGX_CONF_UNSET) {
         rlmt.rlim_cur = (rlim_t) ccf->rlimit_core;
         rlmt.rlim_max = (rlim_t) ccf->rlimit_core;
-
+     
         if (setrlimit(RLIMIT_CORE, &rlmt) == -1) {
             ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                           "setrlimit(RLIMIT_CORE, %O) failed",
@@ -907,7 +925,7 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
 #if (NGX_HAVE_PR_SET_DUMPABLE)
 
     /* allow coredump after setuid() in Linux 2.4.x */
-
+    //prctl对进程进行设置，PR_SET_DUMPABLE:第二个参数1作为处理器标志dumpable被输入
     if (prctl(PR_SET_DUMPABLE, 1, 0, 0, 0) == -1) {
         ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
                       "prctl(PR_SET_DUMPABLE) failed");
@@ -949,10 +967,10 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
     */
     for (i = 0; cycle->modules[i]; i++) {
         if (cycle->modules[i]->init_process) {
-            if (cycle->modules[i]->init_process(cycle) == NGX_ERROR) { //ngx_event_core_module->ngx_event_process_init()
-                                                                       //ngx_epoll_module->NULL
-                                                                       //ngx_core_module->NULL
+            if (cycle->modules[i]->init_process(cycle) == NGX_ERROR) { //ngx_core_module->NULL
                                                                        //ngx_events_module->NULL
+                                                                       //ngx_event_core_module->ngx_event_process_init()
+                                                                       //ngx_epoll_module->NULL
                                                                        //ngx_http_module->NULL
                                                                        //ngx_http_core_module->NULL
                 /* fatal */

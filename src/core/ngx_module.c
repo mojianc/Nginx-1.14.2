@@ -29,7 +29,7 @@ ngx_int_t
 ngx_preinit_modules(void)
 {
     ngx_uint_t  i;
-
+    //安装./configure生成的ngx_modules.c中ngx_modules各模块的顺序依次编号
     for (i = 0; ngx_modules[i]; i++) {
         //设置ngx_module_s中的index
         ngx_modules[i]->index = i;
@@ -123,7 +123,7 @@ ngx_count_modules(ngx_cycle_t *cycle, ngx_uint_t type)
         }
 
         /* search for some free index */
-
+        //记录该模块在同类型中的位置索引
         module->ctx_index = ngx_module_ctx_index(cycle, type, next);
 
         if (module->ctx_index > max) {

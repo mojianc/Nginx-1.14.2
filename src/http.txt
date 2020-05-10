@@ -46,3 +46,6 @@ ngx_events_block()
             |--rv = cmd->set(cf, cmd, conf);
                 |--ngx_http_block();
                     |--ngx_http_init_phase_handlers()
+
+
+ngx_module_t 

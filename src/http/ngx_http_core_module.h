@@ -185,7 +185,7 @@ typedef struct {
     ngx_uint_t                 variables_hash_bucket_size;
 
     ngx_hash_keys_arrays_t    *variables_keys;
-
+    //存放该http{}配置块下监听的所有ngx_http_conf_port_t端口
     ngx_array_t               *ports;
 
     ngx_http_phase_t           phases[NGX_HTTP_LOG_PHASE + 1];
@@ -278,8 +278,11 @@ typedef struct {
 
 
 typedef struct {
+    //socket地址家族
     ngx_int_t                  family;
+    //监听端口
     in_port_t                  port;
+    //监听的端口下对应着的所有ngx_http_conf_addr_t地址
     ngx_array_t                addrs;     /* array of ngx_http_conf_addr_t */
 } ngx_http_conf_port_t;
 
@@ -311,6 +314,7 @@ typedef struct {
 
 
 struct ngx_http_core_loc_conf_s {
+    //location的名称，即nginx.conf中location后的表达式
     ngx_str_t     name;          /* location name */
 
 #if (NGX_PCRE)
@@ -336,6 +340,7 @@ struct ngx_http_core_loc_conf_s {
 #endif
 
     /* pointer to the modules' loc_conf */
+    //指向所属location块内ngx_http_conf_ctx_t结构体重的loc_conf指针数组，它保存着当前location块内所有http模块create_loc_conf方法产生的结构体指针
     void        **loc_conf;
 
     uint32_t      limit_except;
@@ -444,7 +449,7 @@ struct ngx_http_core_loc_conf_s {
 
     ngx_uint_t    types_hash_max_size;
     ngx_uint_t    types_hash_bucket_size;
-
+    //将同一个server块内多个表达location块的ngx_http_core_loc_conf_t结构体以双向链表方式组织起来，该location指针将指向ngx_http_location_queue_t结构体
     ngx_queue_t  *locations;
 
 #if 0
