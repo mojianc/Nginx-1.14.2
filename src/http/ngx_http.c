@@ -228,7 +228,8 @@ ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         mi = cf->cycle->modules[m]->ctx_index;
 
         if (module->create_main_conf) {
-            ctx->main_conf[mi] = module->create_main_conf(cf);
+            ctx->main_conf[mi] = module->create_main_conf(cf); //ngx_http_core_module->ngx_http_core_module_ctx->ngx_http_core_create_main_conf
+                                                               //
             if (ctx->main_conf[mi] == NULL) {
                 return NGX_CONF_ERROR;
             }
@@ -262,7 +263,7 @@ ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         module = cf->cycle->modules[m]->ctx;
 
         if (module->preconfiguration) {
-            if (module->preconfiguration(cf) != NGX_OK) {
+            if (module->preconfiguration(cf) != NGX_OK) {   //ngx_http_core_module->ngx_http_core_module_ctx->ngx_http_core_preconfiguration
                 return NGX_CONF_ERROR;
             }
         }
@@ -299,7 +300,7 @@ ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         /* init http{} main_conf's */
 
         if (module->init_main_conf) {
-            rv = module->init_main_conf(cf, ctx->main_conf[mi]);
+            rv = module->init_main_conf(cf, ctx->main_conf[mi]);//ngx_http_core_module->ngx_http_core_module_ctx->ngx_http_core_init_main_conf
             if (rv != NGX_CONF_OK) {
                 goto failed;
             }
@@ -370,7 +371,7 @@ ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 
     /* optimize the lists of ports, addresses and server names */
-
+    //处理Nginx服务的监听套接字
     if (ngx_http_optimize_servers(cf, cmcf, cmcf->ports) != NGX_OK) {
         return NGX_CONF_ERROR;
     }

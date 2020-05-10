@@ -314,7 +314,7 @@ ngx_event_accept(ngx_event_t *ev)
 
         log->data = NULL;
         log->handler = NULL;
-        /* 调用监听对象的 ngx_listening_t 中的 handler 回调方法。ngx_listening_t 结构体 
+        /* 调用监听对象的 ngx_listening_t 中的 handler 回调方法:ngx_http_init_connection()。ngx_listening_t 结构体 
          * 的 handler 回调方法就是当新的 TCP 连接刚刚建立完成时在这里调用的 */
         ls->handler(c);
 

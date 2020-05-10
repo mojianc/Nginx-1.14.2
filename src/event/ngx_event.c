@@ -1103,7 +1103,8 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
         if (m->create_conf) {
             (*ctx)[cf->cycle->modules[i]->ctx_index] =
-                                                     m->create_conf(cf->cycle);
+                                                     m->create_conf(cf->cycle);//ngx_epoll_module->ngx_epoll_module_ctx->ngx_epoll_create_conf()
+                                                                               //ngx_event_core_module->ngx_event_core_module_ctx->ngx_event_core_create_conf
             if ((*ctx)[cf->cycle->modules[i]->ctx_index] == NULL) {
                 return NGX_CONF_ERROR;
             }
