@@ -29,7 +29,7 @@ ngx_event_timer_init(ngx_log_t *log)
     return NGX_OK;
 }
 
-
+//nginx 查找最早的定时器来判断时间差
 ngx_msec_t
 ngx_event_find_timer(void)
 {
@@ -59,7 +59,7 @@ ngx_event_find_timer(void)
     return (ngx_msec_t) (timer > 0 ? timer : 0);
 }
 
-
+//nginx处理过期(可能有超时的事件)
 void
 ngx_event_expire_timers(void)
 {

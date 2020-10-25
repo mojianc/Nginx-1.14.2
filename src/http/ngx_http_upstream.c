@@ -540,7 +540,7 @@ ngx_http_upstream_init(ngx_http_request_t *r)
     ngx_http_upstream_init_request(r);
 }
 
-
+//初始化upstream请求
 static void
 ngx_http_upstream_init_request(ngx_http_request_t *r)
 {
@@ -609,6 +609,7 @@ ngx_http_upstream_init_request(ngx_http_request_t *r)
     u->store = u->conf->store;
 
     if (!u->store && !r->post_action && !u->conf->ignore_client_abort) {
+        //设置nginx与下游客户端之间TCP连接的检查方法
         r->read_event_handler = ngx_http_upstream_rd_check_broken_connection;
         r->write_event_handler = ngx_http_upstream_wr_check_broken_connection;
     }
@@ -1257,10 +1258,13 @@ ngx_http_upstream_handler(ngx_event_t *ev)
     ngx_http_request_t   *r;
     ngx_http_upstream_t  *u;
 
+    //由事件的data成员取得ngx_connection_t连接。注意，这个连接并不是nginx与客户端的连接，而是nginx与上游服务器之间的连接。
     c = ev->data;
+    //由连接的data成员取得ngx_http_request_t结构体
     r = c->data;
-
+    //由请求的upstream成员取得表示upstream机制的ngx_http_upstream_t结构体
     u = r->upstream;
+    //注意，ngx_http_request_t结构体中这个connection连接是客户端与nginx间的连接
     c = r->connection;
 
     ngx_http_set_log_request(c->log, r);
@@ -1274,12 +1278,14 @@ ngx_http_upstream_handler(ngx_event_t *ev)
     }
 
     if (ev->write) {
+        //当nginx与上游服务器间TCP连接的可写事件被触发时，upstream的write_event_handler方法会被调用
         u->write_event_handler(r, u);
 
     } else {
+        //当nginx与上游服务器间TCP连接的可读事件被触发时，upstream的read_event_handler方法会被调用
         u->read_event_handler(r, u);
     }
-
+    //
     ngx_http_run_posted_requests(c);
 }
 
@@ -1491,7 +1497,7 @@ ngx_http_upstream_check_broken_connection(ngx_http_request_t *r,
     }
 }
 
-
+//用来连接上游服务器的，使用非阻塞的套接字
 static void
 ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {
@@ -2193,13 +2199,14 @@ ngx_http_upstream_send_request_handler(ngx_http_request_t *r,
     ngx_http_upstream_t *u)
 {
     ngx_connection_t  *c;
-
+    //获取与上游服务器间表示连接的ngx_connection_t结构体
     c = u->peer.connection;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http upstream send request handler");
-
+    //写事件的timeout标志位为1时，表示向上游服务器发送的请求已经超时
     if (c->write->timedout) {
+        //将超时错误传递给ngx_http_upstream_next方法，刚方法会根据允许的错误重连策略决定：重新发起连接执行upstream请求，或者结束upstream请求
         ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_TIMEOUT);
         return;
     }
@@ -2212,16 +2219,18 @@ ngx_http_upstream_send_request_handler(ngx_http_request_t *r,
     }
 
 #endif
-
+    //header_sent标志位为1时，标明上游服务器的响应需要直接转发给客户端，而且此时nginx已经把响应包转发给客户端了
     if (u->header_sent && !u->conf->preserve_output) {
+        //事实上，header_sent为1时，一定是已经解析完全部的上游响应包头，并且开始向下游发送HTTP的包头。到此，是不应该继续向上游发送请求了，
+        //所以把write_event_handler设置为任何工作都没有做的ngx_http_upstream_dummy_handler方法
         u->write_event_handler = ngx_http_upstream_dummy_handler;
-
+        //将写事件添加到epoll中
         (void) ngx_handle_write_event(c->write, 0);
-
+        //因为不存在继续发送请求的上游的可能，所以直接返回
         return;
     }
-
-    ngx_http_upstream_send_request(r, u, 1);
+    //调用ngx_http_upstream_send_request向上游服务器发送请求
+    ngx_http_upstream_send_request(r, u, 1); 
 }
 
 

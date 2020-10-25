@@ -488,7 +488,11 @@ struct ngx_http_request_s {
     ngx_http_log_handler_pt           log_handler;
     //在这个请求中如果打开了某些资源，并需要在请求结束时释放，那么都需要在把定义的释放只愿方法添加cleanup成员中
     ngx_http_cleanup_t               *cleanup;
-
+    /*
+        表示当前请求的引用计数。例如，在使用subrequest功能时，依附在这个请求上的子请求数目会返回到count上，每增加一个子请求，count数就要加1.
+        其中任何一个子请求派生出新的子请求时，对应的原始请求(main指针指向的请求)的count值就要加1.又如，当我们接收http包体时，由于这也是一个异步
+        调用，所以count上也需要加1，这样在结束请求时，就不会在count引用计数未清零时销毁请求。
+    */
     unsigned                          count:16;
     unsigned                          subrequests:8;
     //阻塞标志位，目前由aio使用
@@ -515,6 +519,7 @@ struct ngx_http_request_s {
     unsigned                          add_uri_to_alias:1;
     unsigned                          valid_location:1;
     unsigned                          valid_unparsed_uri:1;
+    //标志位，为1时表示URL发生过rewrite重写
     unsigned                          uri_changed:1;
     //表示使用rewrite重写URL的次数，因为目前最多可以更改10次，所以uri_changes初始化为11，而没重写URL一次就把uri_changes减1，一旦uri_changes等于0，则向用户返回失败
     unsigned                          uri_changes:4;

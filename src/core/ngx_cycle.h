@@ -98,35 +98,36 @@ struct ngx_cycle_s {
 	#pid        logs/nginx.pid;
  */
 typedef struct {
-    ngx_flag_t                daemon;
-    ngx_flag_t                master;
+    ngx_flag_t                daemon;  //是否以守护进程方式开启nginx [on|off] 默认：deamon on
+    ngx_flag_t                master;  //master_process[on|off] 是否以master/worker方式运行nginx，当值为off时就不会fork出worker进程。默认：mater_process on
 
-    ngx_msec_t                timer_resolution;
+    ngx_msec_t                timer_resolution; //timer_resolution [interval]   worker进程中gettimeofday函数调用的时间间隔，gettimeofday函数每interval调用一次，
+                                                //这样降低了缓存时间的更新频率，默认没接收到一个kernel进程发送到用户态的事件就调用一次。
     ngx_msec_t                shutdown_timeout;
 
-    ngx_int_t                 worker_processes;
-    ngx_int_t                 debug_points;
+    ngx_int_t                 worker_processes; //worker_processes [number | auto] 设置worker进程的个数，值为auto时表示worker进程数等于当前的CPU个数。默认：work_process 1
+    ngx_int_t                 debug_points; //debug_points [abort | stop] 该配置项用于调试，Abort表示当前进程出现异常时产生一个core dump文件，stop表示当前进程出现异常时停止当前进程。默认此配置项未生效。
 
-    ngx_int_t                 rlimit_nofile;
-    off_t                     rlimit_core;
+    ngx_int_t                 rlimit_nofile; //worker_rlimit_nofile [number]  worker进程打开的最大文件描述符
+    off_t                     rlimit_core;   //worker_rlimit_core [size]  worker进程生成的coredump文件的最大大小
 
-    int                       priority;
+    int                       priority; //worker_priority [number]  设置worker进程的优先级（参考nice命令），默认：worker_priority 1
 
     ngx_uint_t                cpu_affinity_auto;
-    ngx_uint_t                cpu_affinity_n;
+    ngx_uint_t                cpu_affinity_n; //绑定cpu个数
     ngx_cpuset_t             *cpu_affinity;
 
-    char                     *username;
-    ngx_uid_t                 user;
-    ngx_gid_t                 group;
+    char                     *username; //对应user配置项中指定的用户名 [group] worker进程所属的用户及组，当group参数没有配置时，group等于user。默认：usernobody nobody
+    ngx_uid_t                 user;  //保存用户ID
+    ngx_gid_t                 group; //保存组ID
 
-    ngx_str_t                 working_directory;
-    ngx_str_t                 lock_file;
+    ngx_str_t                 working_directory;//worker_directory [directory] 定义worker进程的工作目录
+    ngx_str_t                 lock_file;  //设置文件锁的路径。 默认：lock_filelogs/nginx.lock
 
-    ngx_str_t                 pid;
+    ngx_str_t                 pid; //设置保存进程的ID的文件名。默认：pid nginx.pid
     ngx_str_t                 oldpid;
 
-    ngx_array_t               env;
+    ngx_array_t               env; //env variable[=value] 默认情况下，worker子进程会删除所有从父进程继承过来的环境变量（除TZ变量除外）。env配置项用于保存一些继承过来的环境变量而不被删除。默认： evn TZ
     char                    **environment;
 
     ngx_uint_t                transparent;  /* unsigned  transparent:1; */

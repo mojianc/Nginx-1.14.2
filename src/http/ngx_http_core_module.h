@@ -111,7 +111,7 @@ typedef enum {
     /* Server请求地址重写阶段，在还没有查询到URI匹配的location前，这是rewrite重写URL也作为一个独立的HTTP阶段 */
     NGX_HTTP_SERVER_REWRITE_PHASE,      
     /* 配置查找阶段，根据URI寻找匹配的location，这个阶段通常由ngx_http_core_module模块实现，不建议其他HTTP模块重新定义这一阶段的行为 */
-    NGX_HTTP_FIND_CONFIG_PHASE,      
+    NGX_HTTP_FIND_CONFIG_PHASE,    //不支持介入  
     /* Location请求地址重写阶段，在NGX_HTTP_FIND_CONFIG_PHASE阶段之后重写URL的意义与NGX_HTTP_SERVER_REWRITE_PHASE想染不同
      * 因为这两者会导致查找不同的location块（location是与URI进行匹配）
      */    
@@ -119,7 +119,7 @@ typedef enum {
     /* 请求地址重写提交阶段，这一阶段是用于在rewrite重写URL后重新调到NGX_HTTP_SERVER_REWRITE_PHASE阶段，找到新的URI匹配的location。
      * 所以，这一阶段是无法有第三方HTTP模块处理的，而仅由ngx_http_core_module模块使用
      */              
-    NGX_HTTP_POST_REWRITE_PHASE,        
+    NGX_HTTP_POST_REWRITE_PHASE,   //不支持介入     
     /* 访问权限检查准备阶段，处理NGX_HTTP_ACCESS_PHASE阶段前，http模块可以介入的处理阶段 */
     NGX_HTTP_PREACCESS_PHASE,            
     /* 访问权限检查阶段，这个阶段用于让http模块判断是否允许这个请求访问nginx服务器 */
@@ -127,11 +127,11 @@ typedef enum {
     /* 访问权限检查提交阶段，当NGX_HTTP_PREACCESS_PHASE阶段中http模块的handler处理方法返回不允许访问的错误码时，
      * （实际是NGX_HTTP_FORBIDDEN或者NGX_HTTP_UNAUTHORIZED），这个阶段将负责构造拒绝服务的用户响应。所以，这个阶段实际上用于给NGX_HTTP_ACCESS_PHASE阶段收尾
      */             
-    NGX_HTTP_POST_ACCESS_PHASE,          
+    NGX_HTTP_POST_ACCESS_PHASE,          //不支持介入
     /* 配置项try_files处理阶段，这个阶段完全是为了try_files配置项而设立的，当http请求访问静态文件资源时，try_files配置项可以是这个请求顺序的访问多个静态文件资源，如果摸一个访问失败，
      * 则继续访问try_files中指定的下一个静态资源。另外，这个功能完全是在NGX_HTTP_TRY_FILES_PHASE阶段中实现
      */
-    NGX_HTTP_PRECONTENT_PHASE,           
+    NGX_HTTP_PRECONTENT_PHASE,         //不支持介入  
     //用于处理http请求内容的阶段，这是大部分http模块最喜欢介入的阶段
     NGX_HTTP_CONTENT_PHASE,              /* 内容产生阶段 */
 
@@ -153,21 +153,27 @@ struct ngx_http_phase_handler_s {
 
 
 typedef struct {
-    //由ngx_http_phase_handler_t结构体构成的数组，每一个数组成员代表着一个http模块所添加的一个处理方法
+    //handlers是由ngx_http_phase_handler_t构成的数组首地址，它表示一个请求可能经历的所有ngx_http_handler_pt处理方法
     ngx_http_phase_handler_t  *handlers;
+    //表示NGX_HTTP_SERVER_REWRITE_PHASE阶段的第1个ngx_http_phase_handler_t处理方法在handlers数组中的序号，用于在执行
+    //HTTP请求的任何阶段中快速跳转到NGX_HTTP_SERVER_REWRITE_PHASE阶段处理请求
     ngx_uint_t                 server_rewrite_index;
+    //表示NGX_HTTP_REWRITE_PHASE阶段第1个ngx_http_phase_handler_t处理方法在handlers数组中的序号，用于在执行http请求
+    //的任何阶段中快速跳转到NGX_HTTP_REWRITE_PHASE阶段处理请求
     ngx_uint_t                 location_rewrite_index;
 } ngx_http_phase_engine_t;
 
 
 typedef struct {
+    //handlers动态数组保存着每一个http模块初始化时添加到当前阶段的处理方法
     ngx_array_t                handlers;
 } ngx_http_phase_t;
 
 
 typedef struct {
     ngx_array_t                servers;         /* ngx_http_core_srv_conf_t */
-    //http框架初始化后各个http模块构造的处理方法组成phase_engine
+    //http框架初始化后各个http模块构造的处理方法组成phase_engine，由下面各阶段处理方法构成的phase数组构建的阶段引擎
+    //才是流水式处理http请求的实际数据结构
     ngx_http_phase_engine_t    phase_engine;
 
     ngx_hash_t                 headers_in_hash;
@@ -187,8 +193,9 @@ typedef struct {
     ngx_hash_keys_arrays_t    *variables_keys;
     //存放该http{}配置块下监听的所有ngx_http_conf_port_t端口
     ngx_array_t               *ports;
-
-    ngx_http_phase_t           phases[NGX_HTTP_LOG_PHASE + 1];
+    //用于在http框架初始化时帮助各个http模块在任意阶段中添加http处理方法，它是一个有11个成员的ngx_http_phase_t数组，其中每一个ngx_http_phase_t结构体对应一个
+    //http阶段。在http框架初始化完成后，运行过程中的phase数组是无用的。
+    ngx_http_phase_t           phases[NGX_HTTP_LOG_PHASE + 1]; //http状态机,每个phases都是一个数组
 } ngx_http_core_main_conf_t;
 
 

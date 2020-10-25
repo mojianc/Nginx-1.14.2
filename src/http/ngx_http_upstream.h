@@ -315,31 +315,46 @@ typedef void (*ngx_http_upstream_handler_pt)(ngx_http_request_t *r,
 
 
 struct ngx_http_upstream_s {
+    //处理读事件的回调方法，每一个阶段都有不同的read_event_handler
     ngx_http_upstream_handler_pt     read_event_handler;
+
+    //处理写事件的回调方法，每一个阶段都有不同的write_event_handler
     ngx_http_upstream_handler_pt     write_event_handler;
 
+    //表示主动向上游服务器发起的连接
     ngx_peer_connection_t            peer;
 
+    //当向下游客户端转发响应时（ngx_http_request_t结构体中的subrequest_in_memory标志位为0），如果打开了缓存且认为上游网速更快（conf配置中的buffering标志位为1），
+    //这时会使pipe成员来转发响应。在使用这种方式转发响应式，必须由HTTP模块在使用upstream机制前构造pipe结构体，否则会出现严重的coredump请求错误。
     ngx_event_pipe_t                *pipe;
 
     ngx_chain_t                     *request_bufs;
-
+    
+    //定义了向下游发送响应的方式
     ngx_output_chain_ctx_t           output;
     ngx_chain_writer_ctx_t           writer;
 
+    //使用upstream机制时的各种配置
     ngx_http_upstream_conf_t        *conf;
     ngx_http_upstream_srv_conf_t    *upstream;
 #if (NGX_HTTP_CACHE)
     ngx_array_t                     *caches;
 #endif
 
+    //HTTP模块在实现process_header方法时，如果希望upstream直接转发响应，就需要把解析出的响应的头部适配为HTTP的响应头部，同时需要把包头中信息设置到headers_in结构中，
+    //这样会在后续的步骤中会把headers_in中设置的头部添加到要发送到下游客户端的响应头部headers_out中
     ngx_http_upstream_headers_in_t   headers_in;
 
+    //用于解析主机域名
     ngx_http_upstream_resolved_t    *resolved;
 
     ngx_buf_t                        from_client;
 
+    //接收上游服务器响应包头的缓冲区，在不需要把响应直接转发给客户端，或者buffering标志位为0的情况下转发包体时，接收包体的缓冲区仍然使用buffer。注意，如果没有自定义input_filter方法处理包体，
+    //将使用buffer存储全部的包体，这是buffer必须足够大！它的大小由ngx_http_upstream_conf_f配置结构体中的buffer_size成员决定
     ngx_buf_t                        buffer;
+
+    //表示来自上游服务器的响应包体长度
     off_t                            length;
 
     ngx_chain_t                     *out_bufs;

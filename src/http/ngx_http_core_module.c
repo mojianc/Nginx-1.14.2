@@ -876,7 +876,7 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
 /**
  * 内容接收阶段
  * 有3个http阶段都使用了ngx_http_core_generic_phase作为它们的checker方法，这意味着任何试图在NGX_HTTP_POST_READ_PHASE,NGX_HTTP_PREACCESS_PHASE,
- * NGX_HTTP_LOG_PHASE这3个阶段处理请求的http模块都需要了解ngx_http_core_generic_phase到底做了些什么
+ * NGX_HTTP_LOG_PHASE这3个阶段处理请求的http模块都需要了解ngx_http_core_generic_phase到底做了些什么。
  */
 ngx_int_t
 ngx_http_core_generic_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
@@ -890,31 +890,31 @@ ngx_http_core_generic_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generic phase: %ui", r->phase_handler);
-    /* handler 回调函数*/
+    /*调用这一阶段中各http模块添加的handler处理方法*/
     rc = ph->handler(r);
-    /* 本阶段处理完成，跳转到下一个阶段处理 */
+    /* 如果handler方法返回NGX_OK，之后进入下一阶段处理，而不会理会当前阶段中是否还有其他的处理方法 */
     if (rc == NGX_OK) {
         r->phase_handler = ph->next;
         return NGX_AGAIN;
     }
-    /* 本阶段当前的回调函数处理完成，继续执行本阶段其他回调函数*/
+    /* 如果handler方法返回NGX_DECLINED，那么将进入下一个处理方法，这个处理方法既可能属于当前阶段，也可能属于下一阶段，注意返回NGX_OK和NGX_DECLINED的区别*/
     if (rc == NGX_DECLINED) {
         r->phase_handler++;
         return NGX_AGAIN;
     }
-
+    //如果handler方法返回NGX_AGAIN或者NGX_DONE，那么当前请求将仍然停留在这一处理阶段
     if (rc == NGX_AGAIN || rc == NGX_DONE) {
         return NGX_OK;
     }
 
     /* rc == NGX_ERROR || rc == NGX_HTTP_...  */
-
+    //如果handler方法返回NGX_ERROR或者类似于NGX_HTTP_ 开头的返回码，则调用ngx_http_finalize_request结束请求
     ngx_http_finalize_request(r, rc);
 
     return NGX_OK;
 }
 
-
+//该方法充当了重写URL的NGX_HTTP_SERVER_REWRITE_PHASE和NGX_HTTP_REWRITE_PHASE这两个阶段的checker
 ngx_int_t
 ngx_http_core_rewrite_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
 {

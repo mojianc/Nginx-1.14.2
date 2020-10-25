@@ -14,16 +14,19 @@ ngx_module_t *ngx_modules[]={
 }
 
 NGX_CORE_MODULE
-   |--ngx_core_module
-   |--ngx_events_module
+   |--ngx_core_module //核心模块之一，nginx启动加载的第一个模块，是nginx的核心模块之一；其主要用来保存不属于{}也不包括{}的全局配置项。
+                      //nginx启动时在解析配置之前调用ngx_core_module_create_conf函数创建保存配置项的结构体，配置解析完以后调用ngx_core_module_init_conf函数处理配置文件中没有设置但是属于该模块负责的配置项。
+   |--ngx_events_module //核心模块之一，它是其他所有事件模块的代理模块。nginx在启动时只与events模块打交道，而由events模块来加载其他事件模块；这样做的一个好处就是在添加新的事件模块处理新配置项时原有事件模块代码不需要做任何改动。
+                        //events模块功能非常简单，它只负责处理events配置项（由ngx_events_block函数处理）。ngx_events_block函数做三件事：（1）为其他事件模块创建存储配置项结构指针的指针数组，并调用其他模块的create_conf函数；
+						//(2)调用ngx_conf_parse函数解析events配置项内的配置项；（3）调用其他事件模块的init_conf函数
        NGX_EVENT_MODULE
+	   |--ngx_event_core_module //第一个事件类型模块，它的主要功能是负责解析事件类配置项，选择事件处理机制（select，poll，epoll还是kequeue机制），创建连接池，预分配读写事件池等。
+	                            //ngx_event_core_commands[] 中指定处理conf配置的关于sevents的配置项
        |--ngx_epoll_module
-       |--ngx_event_core_module
-   |--ngx_http_module
+   |--ngx_http_module  //负责解析http{}中的配置，分配内存空间，并调用子模块create_main_conf(),create_srv_conf(),和create_loc_conf()来解析server{}和location{}中的配置。
        NGX_HTTP_MODULE
-       |--ngx_http_core_module
+       |--ngx_http_core_module //解析http基本配置ngx_http_core_module
        |--ngx_http_access_module
-       |--ngx_http_core_module
        |--ngx_http_upstream_module
        |--ngx_http_auth_request_module
        |--ngx_http_autoindex_module
@@ -50,16 +53,14 @@ NGX_CORE_MODULE
    |--ngx_errlog_module
 
 
-   
-
 ngx_module_t  ngx_events_module = {
     NGX_MODULE_V1,
-    &ngx_events_module_ctx{
+    &ngx_events_module_ctx{     //上下文，包含解析的关键字，以及对应的解析函数
         ngx_string("events"),
         NULL,
         ngx_event_init_conf
     }
-    ngx_events_commands { 
+    ngx_events_commands {       //命令，关键对应的处理函数
         ngx_string("events"),
         NGX_MAIN_CONF|NGX_CONF_BLOCK|NGX_CONF_NOARGS,
         ngx_events_block,
@@ -152,3 +153,14 @@ main()
                       |--ngx_epoll_module->ngx_event_actions_t->ngx_epoll_process_events()
                          |--epoll_wait() //等待epoll返回
 
+ngx_init_cycle(ngx_cycle_t *old_cycle)
+    |--if (ngx_conf_parse(&conf, &cycle->conf_file) != NGX_CONF_OK) {
+        |--rv = (*cf->handler)(cf, NULL, cf->handler_conf);
+        |--rc = ngx_conf_handler(cf, rc);
+            |--rv = cmd->set(cf, cmd, conf);
+                /*执行指令对应的  功能函数！！
+                    例如：ngx_events_module->ngx_events_commands->ngx_events_block()
+                    ngx_event_core_module->ngx_event_core_commands->ngx_event_connections()
+                    ngx_epoll_module->ngx_epoll_commands->ngx_conf_set_num_slot()
+                    ngx_http_module->ngx_http_commands->ngx_http_block()
+                */

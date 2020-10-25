@@ -27,18 +27,6 @@ ngx_module_t  ngx_http_module = {
     NGX_MODULE_V1_PADDING
 };
 
-static ngx_command_t  ngx_events_commands[] = {
-
-    { ngx_string("events"),
-      NGX_MAIN_CONF|NGX_CONF_BLOCK|NGX_CONF_NOARGS,
-      ngx_events_block,
-      0,
-      0,
-      NULL },
-
-      ngx_null_command
-};
-
 main
  |--ngx_init_cycle
     |--ngx_core_module->ngx_core_module_ctx->ngx_core_module_create_conf()
@@ -67,8 +55,8 @@ main
 ngx_http_core_main_conf_t{
     //http框架初始化后各个http模块构造的处理方法组成phase_engine
     ngx_http_phase_engine_t    phase_engine{
-        //由ngx_http_phase_handler_t结构体构成的数组，每一个数组成员代表着一个http模块所添加的一个处理方法
-        ngx_http_phase_handler_t  *handlers{
+           //由ngx_http_phase_handler_t结构体构成的数组，每一个数组成员代表着一个http模块所添加的一个处理方法
+            ngx_http_phase_handler_t  *handlers{
             //每个handler方法必须对应一个checker方法，这个checker方法由http框架实现
             ngx_http_phase_handler_pt  checker;
             //各个http模块实现的方法
@@ -81,4 +69,110 @@ ngx_http_core_main_conf_t{
     //存放该http{}配置块下监听的所有ngx_http_conf_port_t端口
     ngx_array_t               *ports;
     ngx_http_phase_t           phases[NGX_HTTP_LOG_PHASE + 1];
+}
+
+========================================================================================================================
+http状态机
+
+typedef struct {
+    ngx_http_phase_t           phases[NGX_HTTP_LOG_PHASE + 1]; //存储状态机
+} ngx_http_core_main_conf_t;
+
+
+typedef struct {
+    ngx_array_t                handlers;
+} ngx_http_phase_t;
+
+struct ngx_http_phase_handler_s {
+    //每个handler方法必须对应一个checker方法，这个checker方法由http框架实现
+    ngx_http_phase_handler_pt  checker;
+    //各个http模块实现的方法
+    ngx_http_handler_pt        handler;
+    ngx_uint_t                 next;
+};
+
+
+ngx_http_core_run_phases()解析：
+
+ngx_http_core_main_conf_t{
+    ngx_http_phase_engine_t    phase_engine{
+        typedef struct {
+            //handlers是由ngx_http_phase_handler_t构成的数组首地址，它表示一个请求可能经历的所有ngx_http_handler_pt处理方法
+            ngx_http_phase_handler_t  *handlers;{
+                struct ngx_http_phase_handler_s {
+                    //每个handler方法必须对应一个checker方法，这个checker方法由http框架实现
+                    ngx_http_phase_handler_pt  checker;
+                    //各个http模块实现的方法
+                    ngx_http_handler_pt        handler;
+                    ngx_uint_t                 next;
+                };
+            }
+            //表示NGX_HTTP_SERVER_REWRITE_PHASE阶段的第1个ngx_http_phase_handler_t处理方法在handlers数组中的序号，用于在执行
+            //HTTP请求的任何阶段中快速跳转到NGX_HTTP_SERVER_REWRITE_PHASE阶段处理请求
+            ngx_uint_t                 server_rewrite_index;
+            //表示NGX_HTTP_REWRITE_PHASE阶段第1个ngx_http_phase_handler_t处理方法在handlers数组中的序号，用于在执行http请求
+            //的任何阶段中快速跳转到NGX_HTTP_REWRITE_PHASE阶段处理请求
+            ngx_uint_t                 location_rewrite_index;
+        } ngx_http_phase_engine_t;
+    }
+}
+
+struct ngx_http_request_s {
+    //全局的ngx_http_phase_engine_t结构中定义了一个ngx_http_phase_handler_t回调方法组成的数组，而phase_handler成员与该数组配合使用，表示请求
+    //下次应当执行以phase_handler作为序号指定的数组中的回调方法，http框架正式以这种方式把各个http模块集成起来处理请求的
+    ngx_int_t                         phase_handler;
+
+}
+
+ngx_http_init_phase_handlers() 初始化状态机
+{
+    for (i = 0; i < NGX_HTTP_LOG_PHASE; i++) {
+        h = cmcf->phases[i].handlers.elts;
+        switch (i) {
+
+        /* server中的rewrite*/
+        case NGX_HTTP_SERVER_REWRITE_PHASE:
+            checker = ngx_http_core_rewrite_phase;
+
+         /* 根据URI查找 location */
+        case NGX_HTTP_FIND_CONFIG_PHASE:
+            ph->checker = ngx_http_core_find_config_phase;
+
+        /* localtion级别的rewrite */
+        case NGX_HTTP_REWRITE_PHASE:
+            checker = ngx_http_core_rewrite_phase;
+
+        /* server、location级别的rewrite都是在这个phase进行收尾工作的*/
+        case NGX_HTTP_POST_REWRITE_PHASE:
+            if (use_rewrite) {
+                ph->checker = ngx_http_core_post_rewrite_phase;
+            }
+
+        /* 细粒度的access，比如权限验证、存取控制 */
+        case NGX_HTTP_ACCESS_PHASE:
+            checker = ngx_http_core_access_phase;
+
+        /* 根据上述两个phase得到access code进行操作 */
+        case NGX_HTTP_POST_ACCESS_PHASE:
+            if (use_access) {
+                ph->checker = ngx_http_core_post_access_phase;
+            }
+
+         /* 生成http响应 */
+        case NGX_HTTP_CONTENT_PHASE:
+            checker = ngx_http_core_content_phase;
+            
+        default:
+            checker = ngx_http_core_generic_phase;
+        }
+
+        n += cmcf->phases[i].handlers.nelts;
+
+        for (j = cmcf->phases[i].handlers.nelts - 1; j >= 0; j--) {
+            ph->checker = checker;
+            ph->handler = h[j];
+            ph->next = n;
+            ph++;
+        }
+    }
 }

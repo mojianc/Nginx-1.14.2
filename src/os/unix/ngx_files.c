@@ -768,15 +768,26 @@ ngx_close_glob(ngx_glob_t *gl)
 ngx_err_t
 ngx_trylock_fd(ngx_fd_t fd)
 {
+    /*
+    struct flock {  
+     short l_type;   //锁类型F_RDLCK 读锁, F_WRLCK写锁, or F_UNLCK解锁   
+     off_t l_start;  //offset in bytes, relative to l_whence 偏移的字节  
+     short l_whence; //SEEK_SET, SEEK_CUR, or SEEK_END    加锁的起始位置  
+     off_t l_len;  //length, in bytes; 0 means lock to EOF  长度  
+     pid_t l_pid;  //returned with F_GETLK   进程ip
+     };
+    */   
+    
     struct flock  fl;
 
     ngx_memzero(&fl, sizeof(struct flock));
     fl.l_type = F_WRLCK;     // 建立一个供写入用的锁定
     fl.l_whence = SEEK_SET;  //以文件开头为锁定的起始位置
     //函数原型：int fcntl(int fd, int cmd, struct flock *lock);
-    //F_SETLK 设置记录锁
-    //F_SETLK    按照指向结构体flock的指针的第三个参数arg所描述的锁的信息设置或者清除一个文件的segment锁。
-    //F_SETLK   被用来实现共享(或读)锁(F_RDLCK)或独占(写)锁(F_WRLCK)，同样可以去掉这两种锁(F_UNLCK)。如果共享锁或独占锁不能被设置，fcntl()将立即返回EAGAIN 
+    //cmd的可选值如下：
+    //F_GETLK   获取文件锁的状态
+    //F_SETLK   设置文件锁定的状态。此时flcok 结构的l_type 值必须是F_RDLCK、F_WRLCK或F_UNLCK。如果无法建立锁定，则返回-1，错误代码为EACCES 或EAGAIN
+    //F_SETLKW  同F_SETLK 作用相同，但是无法建立锁定时，此调用会一直等到锁定动作成功为止。若在等待锁定的过程中被信号中断时，会立即返回-1，错误代码为EINTR
     if (fcntl(fd, F_SETLK, &fl) == -1) {
         return ngx_errno;
     }

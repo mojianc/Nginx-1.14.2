@@ -347,7 +347,10 @@ ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         module = cf->cycle->modules[m]->ctx;
 
         if (module->postconfiguration) {
-            if (module->postconfiguration(cf) != NGX_OK) {
+            if (module->postconfiguration(cf) != NGX_OK) { //ngx_http_rewrite_module->ngx_http_rewrite_module_ctx->ngx_http_rewrite_init
+                                                           //ngx_http_access_module->ngx_http_access_module_ctx->ngx_http_access_init
+                                                           //ngx_http_core_module->ngx_http_core_module_ctx->ngx_http_core_postconfiguration
+                                                           
                 return NGX_CONF_ERROR;
             }
         }
@@ -522,10 +525,14 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
     ngx_http_phase_handler_t   *ph;
     ngx_http_phase_handler_pt   checker;
 
+    //初始化cmcf->phase_engine.server_rewrite_index为-1
+    //cmcf->phase_engine.location_rewrite_index为-1
     cmcf->phase_engine.server_rewrite_index = (ngx_uint_t) -1;
     cmcf->phase_engine.location_rewrite_index = (ngx_uint_t) -1;
     find_config_index = 0;
+    //在ngx_http_rewrite_module->ngx_http_rewrite_module_ctx->ngx_http_rewrite_init()中handlers会插入ngx_http_rewrite_handler
     use_rewrite = cmcf->phases[NGX_HTTP_REWRITE_PHASE].handlers.nelts ? 1 : 0;
+    //在ngx_http_access_module->ngx_http_access_module_ctx->ngx_http_access_init()中handlers会插入ngx_http_access_handler
     use_access = cmcf->phases[NGX_HTTP_ACCESS_PHASE].handlers.nelts ? 1 : 0;
 
     n = 1                  /* find config phase */
@@ -541,7 +548,7 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
     if (ph == NULL) {
         return NGX_ERROR;
     }
-
+    //phase_engine中保存状态机每个阶段的需要处理的函数
     cmcf->phase_engine.handlers = ph;
     n = 0;
 
@@ -549,7 +556,7 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
         h = cmcf->phases[i].handlers.elts;
 
         switch (i) {
-        /* server中的rewrite*/
+        /* server中的rewrite  1*/
         case NGX_HTTP_SERVER_REWRITE_PHASE:
             if (cmcf->phase_engine.server_rewrite_index == (ngx_uint_t) -1) {
                 cmcf->phase_engine.server_rewrite_index = n;
@@ -557,16 +564,17 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
             checker = ngx_http_core_rewrite_phase;
 
             break;
-         /* 根据URI查找 location */
+         /* 根据URI查找 location   2*/
         case NGX_HTTP_FIND_CONFIG_PHASE:
             find_config_index = n;
 
             ph->checker = ngx_http_core_find_config_phase;
+            //在ngx_http_init_phases()中没有对cmcf->phases[i].handlers进行内存分配，所以这里不需要handler直接跳转到下一阶段
             n++;
             ph++;
 
             continue;
-        /* localtion级别的rewrite */
+        /* localtion级别的rewrite  3*/
         case NGX_HTTP_REWRITE_PHASE:
             if (cmcf->phase_engine.location_rewrite_index == (ngx_uint_t) -1) {
                 cmcf->phase_engine.location_rewrite_index = n;
@@ -574,45 +582,55 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
             checker = ngx_http_core_rewrite_phase;
 
             break;
-        /* server、location级别的rewrite都是在这个phase进行收尾工作的*/
+        /* server、location级别的rewrite都是在这个phase进行收尾工作的  4*/
         case NGX_HTTP_POST_REWRITE_PHASE:
             if (use_rewrite) {
                 ph->checker = ngx_http_core_post_rewrite_phase;
                 ph->next = find_config_index;
+                //在ngx_http_init_phases()中没有对cmcf->phases[i].handlers进行内存分配，所以这里不需要handler直接跳转到下一阶段
                 n++;
                 ph++;
             }
 
             continue;
-        /* 细粒度的access，比如权限验证、存取控制 */
+        /* 细粒度的access，比如权限验证、存取控制  6*/
         case NGX_HTTP_ACCESS_PHASE:
             checker = ngx_http_core_access_phase;
             n++;
             break;
-        /* 根据上述两个phase得到access code进行操作 */
+        /* 根据上述两个phase得到access code进行操作  7*/
         case NGX_HTTP_POST_ACCESS_PHASE:
             if (use_access) {
                 ph->checker = ngx_http_core_post_access_phase;
                 ph->next = n;
+                //在ngx_http_init_phases()中没有对cmcf->phases[i].handlers进行内存分配，所以这里不需要handler直接跳转到下一阶段
                 ph++;
             }
 
             continue;
-         /* 生成http响应 */
+         /* 生成http响应  9*/
         case NGX_HTTP_CONTENT_PHASE:
             checker = ngx_http_core_content_phase;
             break;
 
         default:
+            //NGX_HTTP_POST_READ_PHASE 0
+            //NGX_HTTP_PREACCESS_PHASE 5
+            //NGX_HTTP_TRY_FILES_PHASE 8
+            //NGX_HTTP_LOG_PHASE  没有这个阶段
             checker = ngx_http_core_generic_phase;
         }
 
         n += cmcf->phases[i].handlers.nelts;
 
         for (j = cmcf->phases[i].handlers.nelts - 1; j >= 0; j--) {
+            //每一个阶段的checker是相同的
             ph->checker = checker;
+            //将cmcf->phases[i].handlers数组中的handler依次插入到cmcf->phase_engine.handlers数组中
             ph->handler = h[j];
+            //n代表是的状态机跳转到下一阶段的位置，每个阶段有一个相同的checker，多个不同的handler
             ph->next = n;
+            //依次遍历ph节点
             ph++;
         }
     }

@@ -464,15 +464,15 @@ extern ngx_os_io_t  ngx_io;
 
 
 typedef struct {
-    ngx_uint_t    connections;         /* 连接池的大小 */
-    ngx_uint_t    use;                 /* 选用的事件模块在所有事件模块中的序号，即 ctx_index 成员 */
+    ngx_uint_t    connections;         /* 连接池的大小；对应worker_connections或connections配置项*/
+    ngx_uint_t    use;                 /* 选用的事件模块在所有事件模块中的序号，即 ctx_index 成员；对应use配置项 */
 
-    ngx_flag_t    multi_accept;        /* 标志位，为 1 时表示在接收到一个新连接事件时，一次性建立尽可能多的连接 */
-    ngx_flag_t    accept_mutex;        /* 标志位，为 1 时表示启用负载均衡锁 */
+    ngx_flag_t    multi_accept;        /* 标志位，为 1 时表示在接收到一个新连接事件时，一次性建立尽可能多的连接；对应multi_accpet配置项 */
+    ngx_flag_t    accept_mutex;        /* 标志位，为 1 时表示启用负载均衡锁； 对应accpet_mutex配置项 */
 
-    ngx_msec_t    accept_mutex_delay;  /* 负载均衡锁会使有些 worker 进程在拿不到锁时延迟建立新连接，accept_mutex_delay 就是这段延迟时间的长度 */
+    ngx_msec_t    accept_mutex_delay;  /* 负载均衡锁会使有些 worker 进程在拿不到锁时延迟建立新连接，accept_mutex_delay 就是这段延迟时间的长度；对应accept_mutex_delay配置项 */
 
-    u_char       *name;                /* 所选用事件模块的名字，它与 use 成员是匹配的 */
+    u_char       *name;                /* 所选用事件模块的名字，它与 use 成员是匹配的，保存use配置项指定模块的名称 */
 
 #if (NGX_DEBUG)
     ngx_array_t   debug_connection;    /* 在 --with-debug 编译模式下，可以仅针对某些客户端建立的连接输出调试级别的日志， 而 debug-connection 数组用于保存这些客户端的地址信息 */

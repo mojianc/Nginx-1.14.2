@@ -44,7 +44,7 @@ ngx_setaffinity(ngx_cpuset_t *cpu_affinity, ngx_log_t *log)
                           "sched_setaffinity(): using cpu #%ui", i);
         }
     }
-    //设置某进程（或线程）只能运行在某些cpu上
+    //设置某进程（或线程）亲缘性只能运行在某些cpu上
     if (sched_setaffinity(0, sizeof(cpu_set_t), cpu_affinity) == -1) {
         ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
                       "sched_setaffinity() failed");

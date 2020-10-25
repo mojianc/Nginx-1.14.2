@@ -234,17 +234,18 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
             continue;
         }
 
-        module = cycle->modules[i]->ctx;
-
+        module = cycle->modules[i]->ctx; //模块上下文
+        //为配置的数据结构分配内存空间，并完成默认初始化（为各个数据赋值-1）
         if (module->create_conf) {
-            rv = module->create_conf(cycle); //模块回调函数，创建模块的配置信息,这里回调ngx_core_module->ngx_core_module_ctx->ngx_core_module_create_conf
+            rv = module->create_conf(cycle); //模块回调函数，创建模块的配置信息,这里回调ngx_core_module->ngx_core_module_ctx->ngx_core_module_create_conf、
+                                             //                                      ngx_event_core_module->ngx_event_core_module_ctx->ngx_event_core_create_conf
                                              //                                      ngx_events_module->ngx_events_module_ctx->NULL  create_conf为NULL
                                              //                                      ngx_http_module->ngx_http_module_ctx->NULL      create_conf为NULL                 
             if (rv == NULL) {
                 ngx_destroy_pool(pool);
                 return NULL;
             }
-            cycle->conf_ctx[cycle->modules[i]->index] = rv; //配置文件复制
+            cycle->conf_ctx[cycle->modules[i]->index] = rv; //配置文件复制； conf_ctx为cycle的void  ****conf_ctx数组
         }
     }
 
@@ -305,7 +306,10 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
 
         module = cycle->modules[i]->ctx;
 
-        if (module->init_conf) {
+        if (module->init_conf) {             //模块回调函数，创建模块的配置信息,这里回调ngx_core_module->ngx_core_module_ctx->ngx_core_module_init_conf、
+                                             //                                      ngx_event_core_module->ngx_event_core_module_ctx->ngx_event_core_init_conf
+                                             //                                      ngx_events_module->ngx_events_module_ctx->ngx_event_init_conf
+                                             //                                      ngx_http_module->ngx_http_module_ctx->NULL      init_conf为NULL  
             if (module->init_conf(cycle,
                                   cycle->conf_ctx[cycle->modules[i]->index])
                 == NGX_CONF_ERROR)

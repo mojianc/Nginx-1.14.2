@@ -118,22 +118,22 @@ static ngx_str_t  event_core_name = ngx_string("event_core");
 
 
 static ngx_command_t  ngx_event_core_commands[] = {
-    /* 连接池的大小，也就是每个 worker 进程中支持的 TCP 最大连接数 */
+    /* 连接池的大小，也就是每个 worker 进程中支持的 TCP 最大连接数，默认为512 */
     { ngx_string("worker_connections"),
       NGX_EVENT_CONF|NGX_CONF_TAKE1,
       ngx_event_connections,
       0,
       0,
       NULL },
-    /* 确定选择哪一个事件模块作为事件驱动机制 */
+    /* 指定使用哪个事件模型（epoll，select，kequeue等等）模块来处理事件，默认由nginx在configure时根据配置项决定 */
     { ngx_string("use"),
       NGX_EVENT_CONF|NGX_CONF_TAKE1,
       ngx_event_use,
       0,
       0,
       NULL },
-    /* 对应事件定义 ngx_event_s 结构体的成员 available 字段。对于 epoll 事件驱动模式来说，
-     * 意味着在接收到一个新连接事件时，调用 accept 以尽可能多地接收连接 */
+    /* 对应事件定义 ngx_event_s 结构体的成员 available 字段。用于设置尽可能多的接收连接，
+       即在某监听套接字上接收到新连接时循环调用accpet接收所有的新连接，默认关闭 */
     { ngx_string("multi_accept"),
       NGX_EVENT_CONF|NGX_CONF_FLAG,
       ngx_conf_set_flag_slot,
@@ -147,14 +147,14 @@ static ngx_command_t  ngx_event_core_commands[] = {
       0,
       offsetof(ngx_event_conf_t, accept_mutex),
       NULL },
-     /* 启用 accept_mutex 负载均衡锁后，延迟 accept_mutex_delay 毫秒后再试图处理新连接事件 */
+     /* 启用 accept_mutex 负载均衡锁后，延迟 accept_mutex_delay 毫秒后再试图处理新连接事件，默认500ms */
     { ngx_string("accept_mutex_delay"),
       NGX_EVENT_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_msec_slot,
       0,
       offsetof(ngx_event_conf_t, accept_mutex_delay),
       NULL },
-    /* 需要对来自指定 IP 的 TCP 连接打印 debug 级别的调试日志 */
+    /* 需要对来自指定 IP地址 的 TCP 连接打印 debug 级别的调试日志，此功能需要在configure时增加 --with-debug选项 */
     { ngx_string("debug_connection"),
       NGX_EVENT_CONF|NGX_CONF_TAKE1,
       ngx_event_debug_connection,
@@ -168,7 +168,9 @@ static ngx_command_t  ngx_event_core_commands[] = {
 
 static ngx_event_module_t  ngx_event_core_module_ctx = {
     &event_core_name,
+    //在配置项解析前调用分配保存配置项的内存空间
     ngx_event_core_create_conf,            /* create configuration */
+    //在配置项解析完后调用对配置文件中不存在的事件配置进行初始化
     ngx_event_core_init_conf,              /* init configuration */
 
     { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
@@ -551,7 +553,7 @@ ngx_event_module_init(ngx_cycle_t *cycle)
     ngx_event_conf_t    *ecf;
     /* 获取 ngx_events_module 模块持有的关于事件模块的总配置项结构体指针数组 */
     cf = ngx_get_conf(cycle->conf_ctx, ngx_events_module);
-     /* 在总配置项结构体指针数组中获取 ngx_event_core_module 模块的配置项结构体 */
+    /* 在总配置项结构体指针数组中获取 ngx_event_core_module 模块的配置项结构体 */
     ecf = (*cf)[ngx_event_core_module.ctx_index];
 
     if (!ngx_test_config && ngx_process <= NGX_PROCESS_MASTER) {
@@ -1078,7 +1080,7 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     /* count the number of the event modules and set up their indices */
-    /* 计算出编译进 Nginx 的所有事件模块的总个数 */
+    /* 计算出编译进 Nginx 的所有事件模块的总个数， */
     ngx_event_max_module = ngx_count_modules(cf->cycle, NGX_EVENT_MODULE);
     /* 创建该核心事件存储所有事件模块的总配置项结构体指针 */
     ctx = ngx_pcalloc(cf->pool, sizeof(void *));
@@ -1100,7 +1102,7 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         }
 
         m = cf->cycle->modules[i]->ctx;
-
+        //调用其他事件模块的create_conf函数
         if (m->create_conf) {
             (*ctx)[cf->cycle->modules[i]->ctx_index] =
                                                      m->create_conf(cf->cycle);//ngx_epoll_module->ngx_epoll_module_ctx->ngx_epoll_create_conf()
@@ -1112,22 +1114,22 @@ ngx_events_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     pcf = *cf;
+    //在解析events{}内的配置项时，需要用到上面创建的ctx指针数组。
     cf->ctx = ctx;
     cf->module_type = NGX_EVENT_MODULE;
     cf->cmd_type = NGX_EVENT_CONF;
-    /* 调用配置解析，这次解析的是 events{}块中的内容，非文件内容 */
+    /* 调用配置解析，这次解析的是 递归解析events{}块中配置项，非文件内容 */
     //解析配置文件中涉及NGX_EVENT_MODULE模块并执行相关配置注册的相关函数
     rv = ngx_conf_parse(cf, NULL);
-
+    //恢复配置结构
     *cf = pcf;
 
     if (rv != NGX_CONF_OK) {
         return rv;
     }
-    /* 初始化 模块的init_conf 方法*/
+    /* 初始化 调用其他模块的init_conf 方法*/
     //执行NGX_EVENT_MODULE类型的模块注册的init_conf函数完成模块conf的初始化
-    //在event_core_module模块的init_conf阶段，即ngx_event_core_init_conf函数
-    //中完成了IO复用模型的选择
+    //在event_core_module模块的init_conf阶段，即ngx_event_core_init_conf函数中完成了IO复用模型的选择
     for (i = 0; cf->cycle->modules[i]; i++) {
         if (cf->cycle->modules[i]->type != NGX_EVENT_MODULE) {
             continue;
@@ -1346,13 +1348,14 @@ ngx_event_debug_connection(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 static void *
 ngx_event_core_create_conf(ngx_cycle_t *cycle)
 {
-    ngx_event_conf_t  *ecf;
+    ngx_event_conf_t  *ecf;   //event的相关配置保存的数据
 
     ecf = ngx_palloc(cycle->pool, sizeof(ngx_event_conf_t));
     if (ecf == NULL) {
         return NULL;
     }
 
+    //默认初始化
     ecf->connections = NGX_CONF_UNSET_UINT;
     ecf->use = NGX_CONF_UNSET_UINT;
     ecf->multi_accept = NGX_CONF_UNSET;
