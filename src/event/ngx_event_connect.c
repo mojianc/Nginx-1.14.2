@@ -16,7 +16,7 @@ static ngx_int_t ngx_event_connect_set_transparent(ngx_peer_connection_t *pc,
     ngx_socket_t s);
 #endif
 
-
+//upstream连接上游服务器
 ngx_int_t
 ngx_event_connect_peer(ngx_peer_connection_t *pc)
 {
@@ -136,7 +136,7 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
         }
 
 #endif
-
+        //绑定
         if (bind(s, pc->local->sockaddr, pc->local->socklen) == -1) {
             ngx_log_error(NGX_LOG_CRIT, pc->log, ngx_socket_errno,
                           "bind(%V) failed", &pc->local->name);
@@ -180,7 +180,7 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
     pc->connection = c;
 
     c->number = ngx_atomic_fetch_add(ngx_connection_counter, 1);
-
+    //加入epoll
     if (ngx_add_conn) {
         if (ngx_add_conn(c) == NGX_ERROR) {
             goto failed;
@@ -189,7 +189,7 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
 
     ngx_log_debug3(NGX_LOG_DEBUG_EVENT, pc->log, 0,
                    "connect to %V, fd:%d #%uA", pc->name, s, c->number);
-
+    //TCP连接
     rc = connect(s, pc->sockaddr, pc->socklen);
 
     if (rc == -1) {
@@ -284,7 +284,7 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
 
         event = NGX_LEVEL_EVENT;
     }
-
+    //将连接的fd加入epoll中进行监控
     if (ngx_add_event(rev, NGX_READ_EVENT, event) != NGX_OK) {
         goto failed;
     }

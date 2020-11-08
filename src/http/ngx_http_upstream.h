@@ -146,47 +146,70 @@ typedef struct {
 
 
 typedef struct {
+    //当在ngx_http_upstream_t结构体中没有实现resolved成员时，upstream这个结构才能生效，它会在定义上游服务器的配置
     ngx_http_upstream_srv_conf_t    *upstream;
-
+    //建立TCP连接的超时时间，实际上就是写事件添加到定时器中时设置的超时时间
     ngx_msec_t                       connect_timeout;
+    //发送请求的超时时间，通常就是写事件添加到定时器中设置的超时时间
     ngx_msec_t                       send_timeout;
+    //接收响应的超时时间，通常就是读事件添加到定时器中设置的超时时间
     ngx_msec_t                       read_timeout;
     ngx_msec_t                       next_upstream_timeout;
-
+    //TCP的SO_SNOLOWAT选项，表示发送缓冲区的下限
     size_t                           send_lowat;
+    //定义了接收头部的缓冲区配置的内存大小(ngx_http_upstream_t中的buffer的缓冲区)
+    //当不转发响应给下游或者在buffering标志位为0的情况下转发响应时，它同时表示接收包体的缓冲区大小
     size_t                           buffer_size;
     size_t                           limit_rate;
-
+    //仅当buffering标志位1，并且向下游转发响应时生效，它会设置到ngx_event_pipe_t结构体的busy_size成员中
     size_t                           busy_buffers_size;
+    //在buffering标志位为1时，如果上游速度快于下游速度，将有可能把来自上游的响应存储到临时文件中，而max_temp_file_size
+    //指定了临时文件的最大长度。实际上，它将限制ngx_event_pipe_t结构体中的temp_file
     size_t                           max_temp_file_size;
+    //表示将缓冲区中的响应写入临时文件时一次写入字符流的最大长度
     size_t                           temp_file_write_size;
-
+    //以下3个成员目前没有任何意义
     size_t                           busy_buffers_size_conf;
     size_t                           max_temp_file_size_conf;
     size_t                           temp_file_write_size_conf;
-
+    //以缓存响应的方式转发上游服务器的包体时所使用的内存大小
     ngx_bufs_t                       bufs;
-
+    //ignore_headers可以按照二进制使得upstream在转发包头时跳过某些头部的处理
     ngx_uint_t                       ignore_headers;
+    //以二进制位来表示一些错误码，如果处理上游响应时发现这些错误码，那么没有将相应转发给下游客户端时，
+    //将会选择下一个上游服务器来重发请求，参考ngx_http_stream_next
     ngx_uint_t                       next_upstream;
+    //在buffering标志位为1的情况下转发响应时，将有可能把响应放在临时文件中，在ngx_http_upstream_t中的
+    //store_access表示所创建的目录、文件的权限
     ngx_uint_t                       store_access;
     ngx_uint_t                       next_upstream_tries;
+    //决定转发响应方式的标志位，buffering为1时表示打开缓存，这时认为上游的网速快于下游的网速，会尽量地在
+    //内存或者磁盘中缓存来自上游的响应；如果buffering为0，仅会开辟一块固定大小的内存块作为缓存来转发响应
     ngx_flag_t                       buffering;
     ngx_flag_t                       request_buffering;
+    //暂无意义
     ngx_flag_t                       pass_request_headers;
+    //暂无意义
     ngx_flag_t                       pass_request_body;
-
+    //表示标志位，当它为1时，表示与上游服务器互相将不检查nginx与上游客户端间的连接是否断开。也就是说，
+    //即使下游客户端主动关闭了连接，也不会中断与上游服务器间的互动
     ngx_flag_t                       ignore_client_abort;
+    //当解析上游响应的包头时，如果解析后设置到headers_in结构体中的status_n错误码大于400，则会试图把它与error_page中指定的错误码相匹配，
+    //如果匹配上，则发送error_page中指定的响应，否则继续返回上游服务器的错误码（详见ngx_http_upstream_intercept_errors方法）
     ngx_flag_t                       intercept_errors;
+    //buffering标志位为1的情况下转发响应时才有意义，这时，如果cyclic_temp_file为1，则会试图复用临时文件中已经使用过的空间，不建议cyclic_temp_file设置为1
     ngx_flag_t                       cyclic_temp_file;
     ngx_flag_t                       force_ranges;
-
+    //在buffering标志位为1的情况下转发响应时，存放临时文件的路径
     ngx_path_t                      *temp_path;
-
+    //不转发的头部，实际上是通过ngx_http_upstream_hide_header_hash方法，根据hide_heanders和pass_headers动态数组构造出的需要隐藏的HTTP头部散列表
     ngx_hash_t                       hide_headers_hash;
+    //当转发上游响应头部（ngx_http_upstream_t中的headers_in结构体中的头部）给下游客户端时，如果不希望某些头部转发给下游，就设置到hide_headers动态数组中
     ngx_array_t                     *hide_headers;
+    //当转发上游响应头部（ngx_http_upstream_t中的headers_in结构体中的头部）给下游客户端时，upstream机制默认不转发如“Date”“Server”之类的头部，如果确实希望
+    //直接转发它们到下游，就设置到pass_headers动态数组中
     ngx_array_t                     *pass_headers;
-
+    //连接上游服务器时使用的本机地址
     ngx_http_upstream_local_t       *local;
 
 #if (NGX_HTTP_CACHE)
@@ -212,15 +235,20 @@ typedef struct {
     ngx_array_t                     *cache_purge;
     ngx_array_t                     *no_cache;
 #endif
-
+    //当ngx_http_upstream_t中store标志位1时，如果需要将上游的响应放到文件中，store_lengths将表示存放路径的长度，而store_values表示存放路径
     ngx_array_t                     *store_lengths;
     ngx_array_t                     *store_values;
 
 #if (NGX_HTTP_CACHE)
     signed                           cache:2;
 #endif
+    //到目前为止，store标志位的意义与ngx_http_upstream_t中的store相同，仍只有0和1被使用到
     signed                           store:2;
+    //上面的intercept_errors标志位定义了400以上的错误码将会与error_page比较后再行处理，实际上这个规划是可以有一个例外的情况，如果
+    //将intercept_404标志设置为1，当上游返回400时会直接转发这个错误码给下游，而不会去与error_page进行比较
     unsigned                         intercept_404:1;
+    //当该标志位为1时，将会根据ngx_http_upstream_t中headers_in结构体里的X-Accel_Buffering头部(它的值是yes和no)来改变buffering标志位，
+    //当其值为yes时，buffering标志位为1.因此，change_buffering为1时将有可能根据上游服务器返回的响应头部，动态地决定是以上游网速优先还是以下游优先
     unsigned                         change_buffering:1;
     unsigned                         pass_trailers:1;
     unsigned                         preserve_output:1;
@@ -233,7 +261,7 @@ typedef struct {
     ngx_flag_t                       ssl_server_name;
     ngx_flag_t                       ssl_verify;
 #endif
-
+    //使用upstream的模块名称，仅用于记录日志
     ngx_str_t                        module;
 
     NGX_COMPAT_BEGIN(2)
@@ -327,7 +355,8 @@ struct ngx_http_upstream_s {
     //当向下游客户端转发响应时（ngx_http_request_t结构体中的subrequest_in_memory标志位为0），如果打开了缓存且认为上游网速更快（conf配置中的buffering标志位为1），
     //这时会使pipe成员来转发响应。在使用这种方式转发响应式，必须由HTTP模块在使用upstream机制前构造pipe结构体，否则会出现严重的coredump请求错误。
     ngx_event_pipe_t                *pipe;
-
+    //request_bufs以链表的方式把ngx_buf_t缓冲区连接起来，它表示所有需要发送到上游服务器的请求内容，
+    //所以，HTTP模块实现的create_request回调方法就在于构造request_bfs链表
     ngx_chain_t                     *request_bufs;
     
     //定义了向下游发送响应的方式
@@ -356,58 +385,81 @@ struct ngx_http_upstream_s {
 
     //表示来自上游服务器的响应包体长度
     off_t                            length;
-
+    //out_bufs在两种场景下有不同的意义：(1)当不需要转发包体时，且使用默认的input_filter方法（也就是ngx_http_upstream_non_buffered_filter方法）处理包体时，
+    //out_bufs将会指向响应包体，事实上，out_bufs链表中会产生多个ngx_buf_t缓冲区，每个缓冲区都指向buffer缓存中的一部分，而这里的一部分就是每次调用recv方法
+    //接收到的一段TCP流。（2）当需要转发响应包体到下游时（buffering标志位为0，即以下游网速优先），这个链表指向上一次向下游转发响应到现在这段时间内接收自上游的缓存响应
     ngx_chain_t                     *out_bufs;
+    //当需要转发响应包体到下游时（buffering标志位为0，即下游网速优先），它表示上一次向下游转发响应时没有发送完的内容
     ngx_chain_t                     *busy_bufs;
+    //这个链表将用于回收out_bufs中已经发送给下游的ngx_buf_t结构体，这同样应用在buffering标志位为0，即以下游网速优先的场景
     ngx_chain_t                     *free_bufs;
-
+    //处理包体前的初始化方法，其中data参数用于传递用户数据结构，它实际上就是下面的input_filter_ctx指针
     ngx_int_t                      (*input_filter_init)(void *data);
+    //处理包体的方法，其中data参数用于传递用户数据数据，它实际上就是下面的input_filter_ctx指针，而bytes表示此次接收到的包体长度。返回NGX_ERROR时表示处理包体错误，
+    //请求需要结束，否则都将继续upstream流程
     ngx_int_t                      (*input_filter)(void *data, ssize_t bytes);
+    //用于传递HTTP模块自定义的数据结构，在input_filter_init和input_filter方法被回调时会作为参数传递过去
     void                            *input_filter_ctx;
 
 #if (NGX_HTTP_CACHE)
     ngx_int_t                      (*create_key)(ngx_http_request_t *r);
 #endif
+    //HTTP模块实现的create_request方法用于构造发往上游服务器的请求
     ngx_int_t                      (*create_request)(ngx_http_request_t *r);
+    //与上游服务器的通信失败后，如果按照重试规则还需要再次向上服务器发起连接，则会调用reint_request方法
     ngx_int_t                      (*reinit_request)(ngx_http_request_t *r);
+    //解析上游服务器返回响应的包头，返回NGX_AGAIN表示包头还没有接收完整，返回NGX_HTTP_UPSTREAM_INVALID_HEADER表示包头不合法，
+    //返回NGX_ERROR表示出现错误，返回NGX_OK表示解析到完整的包头
     ngx_int_t                      (*process_header)(ngx_http_request_t *r);
+    //当前版本下abort_request回调方法没有任意含义，在upstream的所有流程中都不会调用
     void                           (*abort_request)(ngx_http_request_t *r);
+    //请求结束时调用
     void                           (*finalize_request)(ngx_http_request_t *r,
                                          ngx_int_t rc);
+    //在上游返回的响应出现Location或者Refresh头部表示重定向时，会通过ngx_http_upstream_process_headers方法调用到可由
+    //HTTP模块实现的rewrite_redirect方法
     ngx_int_t                      (*rewrite_redirect)(ngx_http_request_t *r,
                                          ngx_table_elt_t *h, size_t prefix);
     ngx_int_t                      (*rewrite_cookie)(ngx_http_request_t *r,
                                          ngx_table_elt_t *h);
-
+    //暂无意义
     ngx_msec_t                       timeout;
-
+    //用于表示上游响应的错误码，包体长度等信息
     ngx_http_upstream_state_t       *state;
-
+    //不使用文件缓存时没有意义
     ngx_str_t                        method;
+    //schema和uri成员仅在记录日志时会用到，除此之外没有意义
     ngx_str_t                        schema;
     ngx_str_t                        uri;
 
 #if (NGX_HTTP_SSL || NGX_COMPAT)
     ngx_str_t                        ssl_name;
 #endif
-
+    //目前它仅用于表示是否需要清理资源，相当于一个标志位，实际不会调用它所指向的方法
     ngx_http_cleanup_pt             *cleanup;
-
+    //是否指定文件缓存路径的标志位，
     unsigned                         store:1;
+    //是否启动文件缓存
     unsigned                         cacheable:1;
+    //暂无意义
     unsigned                         accel:1;
+    //是否基于ssl协议访问上游服务器
     unsigned                         ssl:1;
 #if (NGX_HTTP_CACHE)
     unsigned                         cache_status:3;
 #endif
-
+    //向下游转发上游响应包体时，是否开启更大的内存及临时磁盘文件用于缓存来不及发送到下游的响应包体
     unsigned                         buffering:1;
     unsigned                         keepalive:1;
     unsigned                         upgrade:1;
-
+    //request_sent表示是否已经向上游服务器发起了请求，当request_sent为1时，表示upstream机制已经向上游服务器发送了全部或者部分请求。
+    //事实上，这个标志位更多的是为了使用ngx_output_chain方法发送请求，因为该方法发送请求时会自动把未发送完的request_bufs链表记录下来，
+    //为了防止反复发送重复请求，必须有request_sent标志位记录是否调用过ngx_output_chain方法
     unsigned                         request_sent:1;
     unsigned                         request_body_sent:1;
     unsigned                         request_body_blocked:1;
+    //将上游服务器响应划分为包头和包尾，如果把响应直接转发给客户端，header_sent标志位表示包头是否发送，header_sent为1时
+    //表示已经把包头转发给客户端了，如果不转发响应到客户端，则header_sent没有意义
     unsigned                         header_sent:1;
 };
 
