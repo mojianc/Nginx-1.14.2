@@ -456,7 +456,7 @@ ngx_handle_write_event(ngx_event_t *wev, size_t lowat)
 
     if (lowat) {
         c = wev->data;
-
+        //设置只有epoll缓冲区大小为lowat，只有lowat大小的缓冲区才能写入
         if (ngx_send_lowat(c, lowat) == NGX_ERROR) {
             return NGX_ERROR;
         }
@@ -467,6 +467,7 @@ ngx_handle_write_event(ngx_event_t *wev, size_t lowat)
         /* kqueue, epoll */
 
         if (!wev->active && !wev->ready) {
+            //添加可写事件，设置水平触发
             if (ngx_add_event(wev, NGX_WRITE_EVENT,
                               NGX_CLEAR_EVENT | (lowat ? NGX_LOWAT_EVENT : 0))
                 == NGX_ERROR)
@@ -477,11 +478,12 @@ ngx_handle_write_event(ngx_event_t *wev, size_t lowat)
 
         return NGX_OK;
 
-    } else if (ngx_event_flags & NGX_USE_LEVEL_EVENT) {
+    } else if (ngx_event_flags & NGX_USE_LEVEL_EVENT) { //一次性读取或写入所有数据
 
         /* select, poll, /dev/poll */
 
         if (!wev->active && !wev->ready) {
+            //如果event未激活并且未ready，插入
             if (ngx_add_event(wev, NGX_WRITE_EVENT, NGX_LEVEL_EVENT)
                 == NGX_ERROR)
             {
@@ -492,6 +494,7 @@ ngx_handle_write_event(ngx_event_t *wev, size_t lowat)
         }
 
         if (wev->active && wev->ready) {
+            //如果event已经激活并且ready，删除
             if (ngx_del_event(wev, NGX_WRITE_EVENT, NGX_LEVEL_EVENT)
                 == NGX_ERROR)
             {

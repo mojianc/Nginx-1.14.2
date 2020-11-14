@@ -179,7 +179,8 @@ ngx_http_read_client_request_body(ngx_http_request_t *r,
         rc = NGX_HTTP_INTERNAL_SERVER_ERROR;
         goto done;
     }
-    //r->read_event_handler指向ngx_http_read_client_request_body_handler，意味着如果epoll再次检测到读事件或者读事件的定时器超时，http框架将调用ngx_http_read_client_request_body_handler处理
+    //r->read_event_handler指向ngx_http_read_client_request_body_handler，
+    //意味着如果epoll再次检测到读事件或者读事件的定时器超时，http框架将调用ngx_http_read_client_request_body_handler处理
     r->read_event_handler = ngx_http_read_client_request_body_handler;
     r->write_event_handler = ngx_http_request_empty_handler;
     //接收包体

@@ -1250,7 +1250,7 @@ failed:
     }
 }
 
-
+//epoll_wait()处理upstream相关的读写事件
 static void
 ngx_http_upstream_handler(ngx_event_t *ev)
 {
@@ -2931,7 +2931,8 @@ ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upstream_t *u)
     }
 
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
-
+    
+    //处理下游优先
     if (!u->buffering) {
 
 #if (NGX_HTTP_CACHE)
@@ -3088,6 +3089,7 @@ ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upstream_t *u)
     }
 
 #endif
+    //处理上游优先
     //注意，这个是直接引用必须分配过内存的pipe指针
     p = u->pipe;
     //这是向下游客户端发送响应的方法ngx_http_upstream_output_filter
@@ -3492,7 +3494,7 @@ ngx_http_upstream_process_upgraded(ngx_http_request_t *r,
     }
 }
 
-//向下游客户端发送响应
+//下游优先时，向下游客户端发送响应
 static void
 ngx_http_upstream_process_non_buffered_downstream(ngx_http_request_t *r)
 {
@@ -3520,7 +3522,7 @@ ngx_http_upstream_process_non_buffered_downstream(ngx_http_request_t *r)
     ngx_http_upstream_process_non_buffered_request(r, 1);
 }
 
-//接收上游服务器的响应时，由这个函数方法处理连接上的这个读事件
+//下游优先时，接收上游服务器的响应时，由这个函数方法处理连接上的这个读事件
 static void
 ngx_http_upstream_process_non_buffered_upstream(ngx_http_request_t *r,
     ngx_http_upstream_t *u)
@@ -3543,7 +3545,7 @@ ngx_http_upstream_process_non_buffered_upstream(ngx_http_request_t *r,
     ngx_http_upstream_process_non_buffered_request(r, 0);
 }
 
-
+//参数do_write为0时，接收上游服务器的响应；do_write为1时，将响应转发给下游服务器
 static void
 ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
     ngx_uint_t do_write)
@@ -3569,13 +3571,14 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
         if (do_write) {
 
             if (u->out_bufs || u->busy_bufs || downstream->buffered) {
+                //向下游客户端转发数据
                 rc = ngx_http_output_filter(r, u->out_bufs);
 
                 if (rc == NGX_ERROR) {
                     ngx_http_upstream_finalize_request(r, u, NGX_ERROR);
                     return;
                 }
-
+                //更新缓冲区状态
                 ngx_chain_update_chains(r->pool, &u->free_bufs, &u->busy_bufs,
                                         &u->out_bufs, u->output.tag);
             }
@@ -3585,6 +3588,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
                 if (u->length == 0
                     || (upstream->read->eof && u->length == -1))
                 {
+                    //全部转发完毕
                     ngx_http_upstream_finalize_request(r, u, 0);
                     return;
                 }
@@ -3592,13 +3596,14 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
                 if (upstream->read->eof) {
                     ngx_log_error(NGX_LOG_ERR, upstream->log, 0,
                                   "upstream prematurely closed connection");
-
+                    //转发报错
                     ngx_http_upstream_finalize_request(r, u,
                                                        NGX_HTTP_BAD_GATEWAY);
                     return;
                 }
 
                 if (upstream->read->error) {
+                    //转发报错
                     ngx_http_upstream_finalize_request(r, u,
                                                        NGX_HTTP_BAD_GATEWAY);
                     return;
@@ -3608,11 +3613,11 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
                 b->last = b->start;
             }
         }
-
+        //获取buffer缓冲区中还有多少剩余空间
         size = b->end - b->last;
 
         if (size && upstream->read->ready) {
-
+            //接收上游服务器的响应数据
             n = upstream->recv(upstream, b->last, size);
 
             if (n == NGX_AGAIN) {
@@ -3628,7 +3633,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
                     return;
                 }
             }
-
+            //接收到数据以后，循环，就可以直接发送了
             do_write = 1;
 
             continue;
@@ -3640,6 +3645,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
     if (downstream->data == r) {
+        //将write事件从epoll中插入或者删除
         if (ngx_handle_write_event(downstream->write, clcf->send_lowat)
             != NGX_OK)
         {
@@ -3654,7 +3660,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
     } else if (downstream->write->timer_set) {
         ngx_del_timer(downstream->write);
     }
-
+     //将read事件从epoll中插入或者删除
     if (ngx_handle_read_event(upstream->read, 0) != NGX_OK) {
         ngx_http_upstream_finalize_request(r, u, NGX_ERROR);
         return;
@@ -3824,7 +3830,7 @@ ngx_http_upstream_output_filter(void *data, ngx_chain_t *chain)
     return rc;
 }
 
-
+//上游优先时，处理下游写事件的方法
 static void
 ngx_http_upstream_process_downstream(ngx_http_request_t *r)
 {
@@ -3866,7 +3872,7 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
 
             return;
         }
-
+        //第二个参数1，表示需要向下有客户端发送响应
         if (ngx_event_pipe(p, 1) == NGX_ABORT) {
             ngx_http_upstream_finalize_request(r, u, NGX_ERROR);
             return;
@@ -3876,7 +3882,7 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
     ngx_http_upstream_process_request(r, u);
 }
 
-
+//上游网速优先，处理上游读事件的方法
 static void
 ngx_http_upstream_process_upstream(ngx_http_request_t *r,
     ngx_http_upstream_t *u)
@@ -3912,7 +3918,7 @@ ngx_http_upstream_process_upstream(ngx_http_request_t *r,
 
             return;
         }
-
+        //第二个参数0，表示需要接收上游服务器的响应
         if (ngx_event_pipe(p, 0) == NGX_ABORT) {
             ngx_http_upstream_finalize_request(r, u, NGX_ERROR);
             return;
@@ -4120,7 +4126,10 @@ ngx_http_upstream_dummy_handler(ngx_http_request_t *r, ngx_http_upstream_t *u)
                    "http upstream dummy handler");
 }
 
-
+//当请求的流程出现错误时，就会调用ngx_http_upstream_next方法
+//比如，如果在接收上游服务器包头的时候出错，接下来就会调用该方法，设置应为upstream机制还提供了一个较为灵活的功能：
+//当与上游的交互出现错误时，Nginx并不想立刻认为这个请求处理失败，而是试图多给上游服务器一些机会，可以重新向这个或者另一台上一服务器发起连接、发送请求、接收响应，
+//以避免网络故障。这个功能可以帮助HTTP模块实现简单的负载均衡功能。
 static void
 ngx_http_upstream_next(ngx_http_request_t *r, ngx_http_upstream_t *u,
     ngx_uint_t ft_type)
@@ -4282,11 +4291,11 @@ ngx_http_upstream_cleanup(void *data)
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "cleanup http upstream request: \"%V\"", &r->uri);
-
+    //最终还是调用ngx_http_upstream_finalize_request方法来结束请求，注意传递的是NGX_DONE参数
     ngx_http_upstream_finalize_request(r, r->upstream, NGX_DONE);
 }
 
-
+//释放与上游交互时分配的资源，如文件句柄、TCP连接等
 static void
 ngx_http_upstream_finalize_request(ngx_http_request_t *r,
     ngx_http_upstream_t *u, ngx_int_t rc)

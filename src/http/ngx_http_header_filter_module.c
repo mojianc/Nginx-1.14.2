@@ -621,7 +621,8 @@ ngx_http_header_filter(ngx_http_request_t *r)
 
     out.buf = b;
     out.next = NULL;
-    //将响应头部发送出去，这个方法是包体过滤模块列表中的最后一个模块ngx_http_write_filter_module的处理方法，当http模块调用ngx_http_output_filter方法发送包体时，最终也是通过该方法发送响应的。
+    //将响应头部发送出去，这个方法是包体过滤模块列表中的最后一个模块ngx_http_write_filter_module的处理方法，
+    //当http模块调用ngx_http_output_filter方法发送包体时，最终也是通过该方法发送响应的。
     return ngx_http_write_filter(r, &out);
 }
 

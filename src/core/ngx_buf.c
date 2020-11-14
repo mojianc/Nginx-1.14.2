@@ -202,6 +202,9 @@ ngx_chain_get_free_buf(ngx_pool_t *p, ngx_chain_t **free)
  * 1. 如果buf不为空，则不释放
  * 2. 如果cl->buf->tag标记不一样，则直接还给Nginx的pool->chain链表
  * 3. 如果buf为空，并且需要释放，则直接释放buf，并且放到free的空闲列表上
+ * 总结：（1）清空out_bufs链表；
+ * （2）把out_bufs中已经发送完的ngx_buf_t结构体清空重置（即把pos和last成员指向start），同时把它们追加到free_bufs链表中；
+ * （3）如果out_bufs中还有未发送完的ngx_buf_t结构体，那么添加到busy_bufs链表中
  */
 void
 ngx_chain_update_chains(ngx_pool_t *p, ngx_chain_t **free, ngx_chain_t **busy,

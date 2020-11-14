@@ -18,7 +18,7 @@ static ngx_int_t ngx_event_pipe_write_chain_to_temp_file(ngx_event_pipe_t *p);
 static ngx_inline void ngx_event_pipe_remove_shadow_links(ngx_buf_t *buf);
 static ngx_int_t ngx_event_pipe_drain_chains(ngx_event_pipe_t *p);
 
-
+//参数do_write为1时，表示需要向下游客户端发送请求，为0时表示需要接收上游服务器的响应
 ngx_int_t
 ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
 {
@@ -29,14 +29,16 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
     for ( ;; ) {
         if (do_write) {
             p->log->action = "sending to client";
-
+            //向下游客户端发送包体
             rc = ngx_event_pipe_write_to_downstream(p);
 
             if (rc == NGX_ABORT) {
+                //表示请求处理失败
                 return NGX_ABORT;
             }
 
             if (rc == NGX_BUSY) {
+                //表示本次暂不往下执行
                 return NGX_OK;
             }
         }
@@ -45,11 +47,12 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
         p->upstream_blocked = 0;
 
         p->log->action = "reading upstream";
-
+        //读取上游服务器的响应
         if (ngx_event_pipe_read_upstream(p) == NGX_ABORT) {
             return NGX_ABORT;
         }
-
+        //p->read为1表示ngx_event_pipe_read_upstream执行后读到了响应，而upstream_blocked为1则表示执行后需要暂时停止读取上游响应
+        //需要通过向下游发送响应来清理出空闲缓冲区，以供ngx_event_pipe_read_upstream方法再次读取上游的响应
         if (!p->read && !p->upstream_blocked) {
             break;
         }
@@ -61,13 +64,14 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
         rev = p->upstream->read;
 
         flags = (rev->eof || rev->error) ? NGX_CLOSE_EVENT : 0;
-
+        //将上游读事件添加到epoll中，等待下一次接收到上游响应的事件出现
         if (ngx_handle_read_event(rev, flags) != NGX_OK) {
             return NGX_ABORT;
         }
 
         if (!rev->delayed) {
             if (rev->active && !rev->ready) {
+                //将从上游服务器的读事件插入到定时器中
                 ngx_add_timer(rev, p->read_timeout);
 
             } else if (rev->timer_set) {
@@ -80,6 +84,7 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
         && p->downstream->data == p->output_ctx)
     {
         wev = p->downstream->write;
+        //将向下游客户端的写事件添加到epoll中，等待下一次接收到下游客户端写事件响应的事件出现
         if (ngx_handle_write_event(wev, p->send_lowat) != NGX_OK) {
             return NGX_ABORT;
         }
@@ -97,7 +102,11 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
     return NGX_OK;
 }
 
-
+//上游优先时，负责接收上游的响应
+//主要的工作：（1）接收响应头部是可能接收到部分包体
+//（2）如果没有没有达到bufs.num上限，那么可以分配bufs.size大小的内存块充当接收缓冲区
+//（3）如果恰好下游的连接出于可写状态，则应该优先发送响应来清理出空闲缓冲区
+//（4）如果缓冲区全部写满，则应该写入临时文件
 static ngx_int_t
 ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
 {
@@ -141,11 +150,13 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
         if (p->upstream_eof || p->upstream_error || p->upstream_done) {
             break;
         }
-
+        //如果读事件的read标志位0，则说明上游响应可以接收；preread_bufs预读缓冲区为空，
+        //则表示接收包体时没有接收到包体，或者收到过包体但是已经处理过了
         if (p->preread_bufs == NULL && !p->upstream->read->ready) {
             break;
         }
-
+        //preread_bufs存放着在接收响应包头时可能接收到的包体，如果preread_bufs中有内容，
+        //意味着需要优先处理这部分包体，而不是接收更多的包体
         if (p->preread_bufs) {
 
             /* use the pre-read bufs if they exist */
@@ -212,7 +223,8 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
             } else {
                 limit = 0;
             }
-
+            //free_raw_bufs用来表示一次ngx_event_pipe_read_upstream方法调过程中接收到的上游响应。注意，free_raw_bufs链表中的缓冲区的顺序与接收顺序相反的。
+            //每次使用缓冲区接收到上游发来的响应，都会把改缓冲区添加到free_raw_bufs末尾。
             if (p->free_raw_bufs) {
 
                 /* use the free bufs if they exist */
@@ -224,7 +236,8 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
                 } else {
                     p->free_raw_bufs = NULL;
                 }
-
+            //将已经分配的缓冲区数量（allocated）与bufs.num进行比较，如果allocated<bufs.num，则可以从pool内存池分配新的缓冲区；
+            //否则，说明分配的缓冲区已经达到上限
             } else if (p->allocated < p->bufs.num) {
 
                 /* allocate a new buf if it's still allowed */
@@ -253,14 +266,15 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
                  * if the bufs are not needed to be saved in a cache and
                  * a downstream is ready then write the bufs to a downstream
                  */
-
+                //表明应当由下游发送响应来释放缓冲区，以期可以使用释放出的空闲缓冲区再接收上游响应
                 p->upstream_blocked = 1;
 
                 ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,
                                "pipe downstream ready");
 
                 break;
-
+            //检查临时文件中已经写入的响应内容长度是否达到配置上限（也就是max_temp_file_size配置），如果已经达到，则暂时不再接收上游响应；
+            //如果没有达到，调用ngx_event_pipe_write_chain_to_temp_file方法将响应写入临时文件。
             } else if (p->cacheable
                        || p->temp_file->offset < p->max_temp_file_size)
             {
@@ -300,7 +314,7 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
 
                 break;
             }
-
+            //接收上游的响应
             n = p->upstream->recv_chain(p->upstream, chain, limit);
 
             ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,
@@ -309,6 +323,7 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
             if (p->free_raw_bufs) {
                 chain->next = p->free_raw_bufs;
             }
+            //将接收到的缓冲区置到free_raw_bufs链表的最后
             p->free_raw_bufs = chain;
 
             if (n == NGX_ERROR) {
@@ -318,15 +333,17 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
 
             if (n == NGX_AGAIN) {
                 if (p->single_buf) {
+                    //将这块缓冲区中的shadow域释放掉，因为刚刚接收到的缓冲区，必然不存在多次引用的情况，所以shadow成员指向空指针
                     ngx_event_pipe_remove_shadow_links(chain->buf);
                 }
 
                 break;
             }
-
+            //表示接收到包体待处理
             p->read = 1;
 
             if (n == 0) {
+                //表示上游服务器已经关闭了连接
                 p->upstream_eof = 1;
                 break;
             }
@@ -493,7 +510,7 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
     return NGX_OK;
 }
 
-
+//负责把in链表和out链表中管理的缓冲区发送给下游客户端，因为out，链表中的缓冲区内容在响应中的位置要比in链表更靠前，所以out需要优先发送给下游
 static ngx_int_t
 ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
 {
@@ -527,7 +544,7 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
         if (p->downstream_error) {
             return ngx_event_pipe_drain_chains(p);
         }
-
+        //任何一个标志位为1，都表示上游连接不会再收到响应了
         if (p->upstream_eof || p->upstream_error || p->upstream_done) {
 
             /* pass the p->out and p->in chains to the output filter */
@@ -543,7 +560,7 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
                 for (cl = p->out; cl; cl = cl->next) {
                     cl->buf->recycled = 0;
                 }
-
+                //把out链表中的缓冲区发送到下游客户端
                 rc = p->output_filter(p->output_ctx, p->out);
 
                 if (rc == NGX_ERROR) {
@@ -565,7 +582,7 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
                 for (cl = p->in; cl; cl = cl->next) {
                     cl->buf->recycled = 0;
                 }
-
+                //把in链表中的缓冲区发送到下游客户端
                 rc = p->output_filter(p->output_ctx, p->in);
 
                 if (rc == NGX_ERROR) {
@@ -580,7 +597,7 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
                            "pipe write downstream done");
 
             /* TODO: free unused bufs */
-
+            //目前没有任何意义
             p->downstream_done = 1;
             break;
         }
@@ -613,7 +630,8 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
                        "pipe write busy: %uz", bsize);
 
         out = NULL;
-
+        //检查busy缓冲区中待发送的响应长度是否超过busy_size配置，若果大于，则不再发送out和in缓冲区的内容，
+        //优先把ngx_http_request_t结构体的out中的内容发送出去
         if (bsize >= (size_t) p->busy_size) {
             flush = 1;
             goto flush;
@@ -688,7 +706,7 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
         }
 
         rc = p->output_filter(p->output_ctx, out);
-
+        //更新free，busy，out缓冲区
         ngx_chain_update_chains(p->pool, &p->free, &p->busy, &out, p->tag);
 
         if (rc == NGX_ERROR) {

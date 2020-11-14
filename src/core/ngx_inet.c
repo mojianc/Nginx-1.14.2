@@ -1444,7 +1444,7 @@ ngx_cmp_sockaddr(struct sockaddr *sa1, socklen_t slen1,
     return NGX_OK;
 }
 
-
+//获取端口号，将sockaddr转化成sockaddr_in，可以把sockaddr看成是sockaddr_in结构体的流形式。
 in_port_t
 ngx_inet_get_port(struct sockaddr *sa)
 {
