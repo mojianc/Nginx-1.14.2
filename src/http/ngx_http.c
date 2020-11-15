@@ -338,7 +338,7 @@ ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
-
+    //对初始化的数据进行赋值，在各个阶段的数组中填入函数指针
     for (m = 0; cf->cycle->modules[m]; m++) {
         if (cf->cycle->modules[m]->type != NGX_HTTP_MODULE) {
             continue;
@@ -617,6 +617,7 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
             //NGX_HTTP_POST_READ_PHASE 0
             //NGX_HTTP_PREACCESS_PHASE 5
             //NGX_HTTP_TRY_FILES_PHASE 8
+            //NGX_HTTP_PRECONTENT_PHASE
             //NGX_HTTP_LOG_PHASE  没有这个阶段
             checker = ngx_http_core_generic_phase;
         }

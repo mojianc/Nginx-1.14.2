@@ -470,7 +470,7 @@ ngx_conf_bitmask_t  ngx_http_upstream_ignore_headers_masks[] = {
     { ngx_null_string, 0 }
 };
 
-
+//创建ngx_http_upstream_t
 ngx_int_t
 ngx_http_upstream_create(ngx_http_request_t *r)
 {
