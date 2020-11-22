@@ -1029,7 +1029,7 @@ ngx_conf_log_error(ngx_uint_t level, ngx_conf_t *cf, ngx_err_t err,
                   cf->conf_file->file.name.data, cf->conf_file->line);
 }
 
-
+//配置flag只有两个值on或off，对应1或0
 char *
 ngx_conf_set_flag_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {

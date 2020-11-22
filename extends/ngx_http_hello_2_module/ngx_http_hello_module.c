@@ -50,7 +50,7 @@ static ngx_http_module_t ngx_http_hello_module_ctx = {
     NULL                                                /*merge location configuration*/
 };
 
-ngx_module_t ngx_http_hello_moudule = {
+ngx_module_t ngx_http_hello_module = {
     NGX_MODULE_V1,
     &ngx_http_hello_module_ctx,         /*module context*/
     ngx_http_hello_commands,            /*module directives*/
@@ -77,7 +77,7 @@ ngx_http_hello_handler(ngx_http_request_t *r)
 
     ngx_log_error(NGX_LOG_EMERG, r->connection->log, 0, "ngx_http_hello_handler is called !");
 
-    my_conf = ngx_http_get_module_loc_conf(r, ngx_http_hello_moudule);
+    my_conf = ngx_http_get_module_loc_conf(r, ngx_http_hello_module);
     if(my_conf->hello_string.len == 0)
     {
         ngx_log_error(NGX_LOG_EMERG, r->connection->log, 0, "hello_string is empty !");
@@ -173,7 +173,7 @@ static char *ngx_http_hello_counter(ngx_conf_t *cf, ngx_command_t *cmd, void *co
     local_conf = conf;
 
     char *rv = NULL;
-
+    //获取配置项，将on或off转换为1或者0
     rv = ngx_conf_set_flag_slot(cf, cmd, conf);
 
     ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "hello_counter:%d", local_conf->hello_counter);

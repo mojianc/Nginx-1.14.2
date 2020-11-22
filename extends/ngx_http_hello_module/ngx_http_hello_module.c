@@ -68,6 +68,8 @@ ngx_http_hello(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
 	 * HTTP框架在处理用户请求进行到NGX_HTTP_CONCENT_PHASE阶段时，如果请求机的主机域名，URL与hello配置项所在的配置块匹配，就将调用我们
 	 * 实现的ngx_http_hello_handler方法处理这个请求
 	 */
+	//会在ngx_http_update_location_config(ngx_http_request_t *r)函数中将r->content_handler = clcf->handler;
+	//在执行NGX_HTTP_CONCENT_PHASE时，执行r->content_handler
 	clcf->handler = ngx_http_hello_handler;
  
 	return NGX_CONF_OK;

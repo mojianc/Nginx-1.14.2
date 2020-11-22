@@ -1,4 +1,4 @@
-#define NGX_CONFIGURE ""
+#define NGX_CONFIGURE " --add-module=/home/mojianc/src/Nginx-1.14.2/extends/ngx_http_hello_2_module"
 
 #ifndef NGX_COMPILER
 #define NGX_COMPILER  "gcc 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.12) "
