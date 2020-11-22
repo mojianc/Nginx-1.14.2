@@ -295,7 +295,7 @@ ngx_http_rewrite_init(ngx_conf_t *cf)
     if (h == NULL) {
         return NGX_ERROR;
     }
-
+    //在NGX_HTTP_SERVER_REWRITE_PHASE和NGX_HTTP_REWRITE_PHASE这两个阶段都加入ngx_http_rewrite_handler重定向处理
     *h = ngx_http_rewrite_handler;
 
     return NGX_OK;
