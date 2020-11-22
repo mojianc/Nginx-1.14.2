@@ -176,7 +176,9 @@ ngx_http_upstream_get_ip_hash_peer(ngx_peer_connection_t *pc, void *data)
     hash = iphp->hash;
 
     for ( ;; ) {
-
+        //iphp->addr[i]为ip点分十进制法的第i段
+        //for循环 i取 012三个值，而ip的点分十进制表示方法将ip分成四段（如：192.168.1.1），但是这里循环时只是将ip的前三个端作为参数加入hash函数。
+        //这样做的目的是保证ip地址前三位相同的用户经过hash计算将分配到相同的后端server。
         for (i = 0; i < (ngx_uint_t) iphp->addrlen; i++) {
             hash = (hash * 113 + iphp->addr[i]) % 6271;
         }
